@@ -7,6 +7,7 @@ from loguru import logger
 
 from src.agent.domain import commands, events
 from src.agent.utils import populate_template
+from src.agent.validators.sql_validator import SQLValidator
 
 
 class SQLBaseAgent:
@@ -58,6 +59,7 @@ class SQLBaseAgent:
         self.response = None
         self.send_response = None
         self.sql_query = None
+        self.sql_validator = SQLValidator()
 
         self.base_prompts = self.init_prompts()
         self.construction = commands.SQLConstruction(
@@ -241,6 +243,13 @@ class SQLBaseAgent:
             new_command: commands.SQLExecution: The command to execute the SQL query.
         """
 
+        # Validate the SQL query before execution
+        try:
+            self.sql_validator.validate(command.sql_query)
+        except ValueError as e:
+            logger.error(f"SQL validation failed: {e}")
+            raise
+        
         self.sql_query = deepcopy(command.sql_query)
 
         new_command = commands.SQLExecution(
