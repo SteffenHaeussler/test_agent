@@ -2,7 +2,7 @@
 .env
 .docker.env
 *report.json
-
+*.pyc
 *.csv
 
 # Evaluation reports
