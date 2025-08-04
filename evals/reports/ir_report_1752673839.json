@@ -1,0 +1,10 @@
+[
+  {
+    "test_name": "ir_eval_1",
+    "question": "What is the daily maximum value of PI-P0017 in April 2025?",
+    "expected": "",
+    "actual": "FQI-F0024",
+    "passed": false,
+    "execution_time_ms": 739
+  }
+]

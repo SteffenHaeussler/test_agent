@@ -1,0 +1,26 @@
+[
+  {
+    "test_name": "post_check_eval_1",
+    "question": "What is the daily maximum value of PI-P0017 in April 2025?",
+    "expected": true,
+    "actual": true,
+    "passed": true,
+    "execution_time_ms": 6418
+  },
+  {
+    "test_name": "post_check_eval_2",
+    "question": "What is the daily maximum value of PI-P0017 in April 2025?",
+    "expected": false,
+    "actual": false,
+    "passed": true,
+    "execution_time_ms": 11813
+  },
+  {
+    "test_name": "post_check_eval_3",
+    "question": "What is the maximum pressure of PI-P0017 in April 2025?",
+    "expected": false,
+    "actual": false,
+    "passed": true,
+    "execution_time_ms": 9606
+  }
+]

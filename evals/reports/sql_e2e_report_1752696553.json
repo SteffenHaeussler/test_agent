@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "e2e_active_products_catalog",
+    "question": "What are all the active products in our catalog?",
+    "expected": "SELECT product_id, name, sku FROM products WHERE is_active = TRUE",
+    "actual": "NO SQL GENERATED",
+    "passed": false,
+    "execution_time_ms": 330134,
+    "overall_score": 2.5,
+    "accuracy": 0.0,
+    "relevance": 0.0,
+    "completeness": 0.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The actual response completely fails to address the user's question. Instead of providing the expected SQL query to retrieve active products from the catalog, it simply states 'NO SQL GENERATED'. This is a total failure in terms of accuracy, relevance, and completeness. The response provides no value to the user and doesn't attempt to solve the problem presented."
+  }
+]

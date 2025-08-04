@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "join_products_by_customer_join",
+    "question": "What are all the active products in our catalog?",
+    "expected": "[{'from_table': '', 'to_table': '', 'from_column': '', 'to_column': '', 'join_type': ''}]",
+    "actual": "[]",
+    "passed": false,
+    "execution_time_ms": 10006,
+    "overall_score": 2.5,
+    "accuracy": 0.0,
+    "relevance": 0.0,
+    "completeness": 0.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The actual response completely fails to address the question. The user asked for active products in their catalog, but received an empty array with no information, explanation, or guidance. This appears to be a system error or malfunction rather than a meaningful response. The expected response format suggests this should return database join information, but the actual response provides nothing useful."
+  }
+]

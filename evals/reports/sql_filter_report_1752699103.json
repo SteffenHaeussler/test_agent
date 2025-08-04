@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "filter_active_products_filter",
+    "question": "What are all the active products in our catalog?",
+    "expected": "[{'column': 'products.is_active', 'operator': '=', 'value': 'TRUE'}]",
+    "actual": "[{'column': 'products.is_active', 'operator': '=', 'value': 'true'}]",
+    "passed": true,
+    "execution_time_ms": 8267,
+    "overall_score": 9.75,
+    "accuracy": 9.0,
+    "relevance": 10.0,
+    "completeness": 10.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The actual response is very close to the expected response, with only a minor difference in boolean value casing ('true' vs 'TRUE'). This is likely a trivial difference that wouldn't impact functionality in most database systems. The response correctly identifies the need to filter on the 'products.is_active' column with an equality operator for true values."
+  }
+]

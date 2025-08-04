@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "construction_revenue_by_customer_aggregation",
+    "question": "What are all the active products in our catalog?",
+    "expected": "SELECT product_id, name, sku FROM products WHERE is_active = TRUE",
+    "actual": "SELECT product_id, name FROM products WHERE is_active = TRUE",
+    "passed": false,
+    "execution_time_ms": 10701,
+    "overall_score": 9.0,
+    "accuracy": 9.0,
+    "relevance": 10.0,
+    "completeness": 7.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The response provides a functionally correct SQL query that answers the question by retrieving active products. However, it's incomplete compared to the expected response as it omits the 'sku' column. The query structure and logic are sound, making it a mostly accurate but not fully complete answer."
+  }
+]

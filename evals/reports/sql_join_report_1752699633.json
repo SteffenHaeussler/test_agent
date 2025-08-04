@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "join_products_by_customer_join",
+    "question": "What are all the active products in our catalog?",
+    "expected": "None",
+    "actual": "[]",
+    "passed": true,
+    "execution_time_ms": 28196,
+    "overall_score": 10.0,
+    "accuracy": 10.0,
+    "relevance": 10.0,
+    "completeness": 10.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The actual response is excellent and equivalent to the expected response. Both [] and None effectively communicate that there are no active products in the catalog. The empty list format is actually more appropriate for a catalog query as it clearly indicates an empty result set rather than a null value."
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "run_id": "tool_pre_check_report_1752743688",
+  "test_suite": "tool_pre_check",
+  "timestamp": 1752743688,
+  "model_info": {
+    "llm_model_id": "claude-sonnet-4-20250514",
+    "tools_model_id": "claude-sonnet-4-20250514"
+  },
+  "results": [
+    {
+      "test_name": "pre_check_eval_1",
+      "question": "What is the daily maximum value of PI-P0017 in April 2025?",
+      "expected": true,
+      "actual": true,
+      "passed": true,
+      "execution_time_ms": 6716
+    },
+    {
+      "test_name": "pre_check_eval_2",
+      "question": "What is temperature?",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "execution_time_ms": 7074
+    },
+    {
+      "test_name": "pre_check_eval_3",
+      "question": "You're so stupid. You are always wrong and errornous.",
+      "expected": false,
+      "actual": false,
+      "passed": true,
+      "execution_time_ms": 7112
+    }
+  ]
+}

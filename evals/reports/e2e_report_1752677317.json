@@ -1,0 +1,30 @@
+[
+  {
+    "test_name": "e2e_eval_agg_data_1",
+    "question": "How much was produced in the first two weeks of 2025?",
+    "expected": "The total production rate of FQI-F0024 in the first two weeks of 2025 is approximately 3423.57 units.",
+    "actual": "end",
+    "passed": false,
+    "execution_time_ms": 104775,
+    "overall_score": 2.5,
+    "accuracy": 0.0,
+    "relevance": 0.0,
+    "completeness": 0.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The actual response is completely inadequate. Instead of providing the expected detailed answer about production quantities (3423.57 units of FQI-F0024), the AI simply responded with the word 'end'. This appears to be a system error or malfunction rather than an attempt to answer the question. The response fails on all meaningful dimensions except for the absence of hallucination (since no false information was provided, just no information at all)."
+  },
+  {
+    "test_name": "e2e_eval_agg_data_2",
+    "question": "How much was the total production in the distillation first two weeks of 2025?",
+    "expected": "The total production of FQI-F0024 in the first two weeks of 2025 was approximately 3423.57 units.",
+    "actual": "end",
+    "passed": false,
+    "execution_time_ms": 52492,
+    "overall_score": 1.25,
+    "accuracy": 0.0,
+    "relevance": 0.0,
+    "completeness": 0.0,
+    "hallucination": 5.0,
+    "judge_assessment": "The actual response is completely inadequate. It consists only of the word \"end\" which provides no information about distillation production, time periods, or any numerical data. This appears to be either a system error, incomplete response, or placeholder text rather than a genuine attempt to answer the question."
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "aggregate_revenue_by_customer_aggregation",
+    "question": "What are all the active products in our catalog?",
+    "expected": "{'is_aggregation_query': False}",
+    "actual": "{'aggregations': [], 'group_by_columns': [], 'is_aggregation_query': False}",
+    "passed": true,
+    "execution_time_ms": 9457,
+    "overall_score": 10.0,
+    "accuracy": 10.0,
+    "relevance": 10.0,
+    "completeness": 10.0,
+    "hallucination": 10.0,
+    "judge_assessment": "The actual response is excellent. It correctly identifies the query as non-aggregation (matching the expected response) and provides additional accurate metadata. While more detailed than expected, the extra information is relevant and correct. The response demonstrates proper understanding of query classification."
+  }
+]

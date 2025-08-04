@@ -1,0 +1,16 @@
+[
+  {
+    "test_name": "e2e_eval_agg_data_1",
+    "question": "How much was produced in the first two weeks of 2025?",
+    "expected": "The total production rate of FQI-F0024 in the first two weeks of 2025 is approximately 3423.57 units.",
+    "actual": "The total production rate of FQI-F0024 (distillation) in the first two weeks of 2025 is approximately 82,166 units.",
+    "passed": false,
+    "execution_time_ms": 79355,
+    "overall_score": 4.5,
+    "accuracy": 0.0,
+    "relevance": 8.0,
+    "completeness": 8.0,
+    "hallucination": 2.0,
+    "judge_assessment": "The response addresses the question appropriately in terms of format and relevance, but contains a critical factual error with the production figure being dramatically different from the expected value. This represents a significant accuracy failure that undermines the response's reliability despite its structural completeness."
+  }
+]
