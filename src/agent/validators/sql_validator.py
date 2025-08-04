@@ -1,10 +1,9 @@
 """SQL validator to prevent SQL injection attacks."""
 
-import logging
 import re
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class SQLValidator:
@@ -72,8 +71,9 @@ class SQLValidator:
             pattern = rf"\b{operation}\b"
             if re.search(pattern, normalized_query):
                 logger.warning(
-                    f"SQL validation failed: {operation} operation detected in query",
-                    extra={"operation": operation, "query_snippet": sql_query[:100]}
+                    "SQL validation failed: {operation} operation detected in query",
+                    operation=operation,
+                    query_snippet=sql_query[:100]
                 )
                 raise ValueError(f"{operation} operations are not allowed")
         
@@ -82,7 +82,7 @@ class SQLValidator:
         if self._contains_multiple_statements(sql_query):
             logger.warning(
                 "SQL validation failed: Multiple statements detected",
-                extra={"query_snippet": sql_query[:100]}
+                query_snippet=sql_query[:100]
             )
             raise ValueError("Multiple SQL statements are not allowed")
         
@@ -91,7 +91,7 @@ class SQLValidator:
         if re.search(r'\bUNION\b(?!\s+ALL)', normalized_query):
             logger.warning(
                 "SQL validation failed: UNION operation detected",
-                extra={"query_snippet": sql_query[:100]}
+                query_snippet=sql_query[:100]
             )
             raise ValueError("UNION operations are not allowed")
         
