@@ -25,7 +25,7 @@ Phase 1 focuses on critical security vulnerabilities and reliability issues that
 # Test 1: Should reject DROP statements
 def test_rejects_drop_statements()
 
-# Test 2: Should reject DELETE statements  
+# Test 2: Should reject DELETE statements
 def test_rejects_delete_statements()
 
 # Test 3: Should accept valid SELECT statements

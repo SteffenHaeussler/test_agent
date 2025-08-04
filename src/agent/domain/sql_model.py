@@ -249,7 +249,7 @@ class SQLBaseAgent:
         except ValueError as e:
             logger.error(f"SQL validation failed: {e}")
             raise
-        
+
         self.sql_query = deepcopy(command.sql_query)
 
         new_command = commands.SQLExecution(

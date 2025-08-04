@@ -23,7 +23,7 @@ VALID_CTE_QUERIES = [
     WITH RECURSIVE subordinates AS (
         SELECT id, name, manager_id FROM employees WHERE id = 1
         UNION ALL
-        SELECT e.id, e.name, e.manager_id 
+        SELECT e.id, e.name, e.manager_id
         FROM employees e
         JOIN subordinates s ON e.manager_id = s.id
     )
@@ -61,7 +61,7 @@ SQL_INJECTION_ATTEMPTS = [
 # Complex queries that should be rejected
 COMPLEX_FORBIDDEN_QUERIES = [
     """
-    SELECT * FROM users 
+    SELECT * FROM users
     WHERE id IN (
         DELETE FROM orders WHERE status = 'pending' RETURNING user_id
     );
@@ -73,10 +73,10 @@ COMPLEX_FORBIDDEN_QUERIES = [
     SELECT * FROM users;
     """,
     """
-    SELECT 
-        CASE 
+    SELECT
+        CASE
             WHEN 1=1 THEN (UPDATE users SET admin = true)
-            ELSE id 
+            ELSE id
         END as result
     FROM users;
     """,
