@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from src.agent.adapters.database import BaseDatabaseAdapter
+from src.agent.exceptions import DatabaseConnectionException
 
 
 @pytest.fixture
@@ -37,10 +38,10 @@ class TestDatabase:
         side_effect=Exception("Database connection failed"),
     )
     def test_connection_error(self, mock_create_engine, database_instance):
-        with database_instance as db:
-            result = db.execute_query("SELECT * FROM your_table")
-            assert result is None
+        with pytest.raises(DatabaseConnectionException):
+            with database_instance as db:
+                db.execute_query("SELECT * FROM your_table")
 
     def test_execute_query_no_engine(self, database_instance):
-        result = database_instance.execute_query("SELECT * FROM your_table")
-        assert result is None
+        with pytest.raises(DatabaseConnectionException):
+            database_instance.execute_query("SELECT * FROM your_table")

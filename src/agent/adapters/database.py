@@ -5,6 +5,12 @@ import pandas as pd
 from loguru import logger
 from sqlalchemy import MetaData, create_engine, text
 
+from src.agent.exceptions import (
+    DatabaseConnectionException,
+    DatabaseQueryException,
+    DatabaseTransactionException,
+)
+
 
 class AbstractDatabase(ABC):
     """
@@ -71,14 +77,26 @@ class BaseDatabaseAdapter(AbstractDatabase):
 
         Returns:
             connection: Any: The database connection object.
+
+        Raises:
+            DatabaseConnectionException: If connection creation fails.
         """
         try:
             engine = create_engine(self.connection_string)
             logger.info("SQLAlchemy engine created successfully.")
+            return engine
         except Exception as e:
             logger.error(f"Error creating SQLAlchemy engine: {e}")
-            engine = None
-        return engine
+            context = {
+                "connection_string": self.connection_string,
+                "db_type": self.db_type,
+                "operation": "create_engine",
+            }
+            raise DatabaseConnectionException(
+                f"Failed to create database connection: {e}",
+                context=context,
+                original_exception=e,
+            )
 
     def connect(self) -> None:
         """
@@ -104,14 +122,27 @@ class BaseDatabaseAdapter(AbstractDatabase):
         self,
         sql_statement: str,
         params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, pd.DataFrame]]:
+    ) -> Dict[str, pd.DataFrame]:
         """
         Executes a SELECT SQL query and returns the result as a Pandas DataFrame.
         This is the officially supported way.
+
+        Raises:
+            DatabaseConnectionException: If engine is not available.
+            DatabaseQueryException: If query execution fails.
         """
         if not self.engine:
             logger.error("Engine not available. Cannot execute query.")
-            return None
+            context = {
+                "engine_available": False,
+                "operation": "execute_query",
+                "query": sql_statement,
+                "parameters": params,
+            }
+            raise DatabaseConnectionException(
+                "Database engine not available for query execution",
+                context=context,
+            )
 
         try:
             # Pandas reads directly from the SQLAlchemy engine
@@ -121,24 +152,52 @@ class BaseDatabaseAdapter(AbstractDatabase):
             return {"data": df}
         except Exception as e:
             logger.error(f"Error executing query to DataFrame: {e}")
-            return None
+            context = {
+                "query": sql_statement,
+                "parameters": params,
+                "db_type": self.db_type,
+                "operation": "execute_query",
+            }
+            raise DatabaseQueryException(
+                f"Failed to execute database query: {e}",
+                context=context,
+                original_exception=e,
+            )
 
     def get_schema(self) -> Dict[str, Any]:
         """
         Get the schema of the database.
-        """
-        metadata = MetaData()
 
+        Raises:
+            DatabaseConnectionException: If engine is not available.
+            DatabaseQueryException: If schema reflection fails.
+        """
         if not self.engine:
             logger.error("Engine not available. Cannot execute query.")
-            return None
+            context = {
+                "engine_available": False,
+                "operation": "get_schema",
+            }
+            raise DatabaseConnectionException(
+                "Database engine not available for schema reflection",
+                context=context,
+            )
 
+        metadata = MetaData()
         try:
             metadata.reflect(bind=self.engine)
             return metadata
         except Exception as e:
             logger.error(f"Error reflecting metadata: {e}")
-            return None
+            context = {
+                "operation": "schema_reflection",
+                "db_type": self.db_type,
+            }
+            raise DatabaseQueryException(
+                f"Failed to reflect database schema: {e}",
+                context=context,
+                original_exception=e,
+            )
 
     def insert_data(self, table_name: str, data: Dict[str, Any]) -> bool:
         """
@@ -162,11 +221,24 @@ class BaseDatabaseAdapter(AbstractDatabase):
             data_list: List of dictionaries, each containing column names and values
 
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if successful
+
+        Raises:
+            DatabaseConnectionException: If engine is not available.
+            DatabaseTransactionException: If transaction fails.
         """
         if not self.engine:
             logger.error("Engine not available. Cannot insert data.")
-            return False
+            context = {
+                "engine_available": False,
+                "operation": "insert_batch",
+                "table_name": table_name,
+                "row_count": len(data_list),
+            }
+            raise DatabaseConnectionException(
+                "Database engine not available for data insertion",
+                context=context,
+            )
 
         if not data_list:
             logger.warning("No data to insert.")
@@ -189,4 +261,14 @@ class BaseDatabaseAdapter(AbstractDatabase):
             return True
         except Exception as e:
             logger.error(f"Error inserting data: {e}")
-            return False
+            context = {
+                "table_name": table_name,
+                "row_count": len(data_list),
+                "operation": "batch_insert",
+                "db_type": self.db_type,
+            }
+            raise DatabaseTransactionException(
+                f"Failed to insert data into {table_name}: {e}",
+                context=context,
+                original_exception=e,
+            )

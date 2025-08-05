@@ -6,63 +6,15 @@ Following TDD and Tidy First principles, this plan separates structural changes 
 
 Phase 1 focuses on critical security vulnerabilities and reliability issues that pose immediate risks to the system. Each task will follow the TDD cycle (Red → Green → Refactor) with clear separation of structural and behavioral changes.
 
-## 1. SQL Injection Protection
+## ✅ COMPLETED: SQL Injection Protection
+The SQL injection protection has been fully implemented:
+- Created `src/agent/validators/sql_validator.py` with comprehensive validation
+- Full test suite in `tests/unit/test_sql_validator.py` (12 tests, all passing)
+- Integrated into `src/agent/domain/sql_model.py`
+- Uses whitelist approach allowing only SELECT and WITH operations
+- Prevents multiple statements, forbidden operations, and UNION attacks
 
-### Current State Analysis
-- **Location**: `src/agent/domain/sql_model.py`
-- **Issue**: LLM-generated SQL is executed without validation
-- **Risk**: Potential for malicious SQL injection through prompt manipulation
-
-### Implementation Steps (TDD Approach)
-
-#### Step 1: Create Test Infrastructure (Structural)
-1. Create `tests/unit/test_sql_validator.py`
-2. Create `tests/fixtures/sql_samples.py` with test SQL statements
-3. No behavioral changes - just organizing test structure
-
-#### Step 2: Write Failing Tests (Red Phase)
-```python
-# Test 1: Should reject DROP statements
-def test_rejects_drop_statements()
-
-# Test 2: Should reject DELETE statements
-def test_rejects_delete_statements()
-
-# Test 3: Should accept valid SELECT statements
-def test_accepts_valid_select_statements()
-
-# Test 4: Should accept CTEs with SELECT
-def test_accepts_cte_with_select()
-
-# Test 5: Should reject SELECT with subquery containing forbidden operations
-def test_rejects_nested_forbidden_operations()
-```
-
-#### Step 3: Implement SQLValidator (Green Phase)
-1. Create `src/agent/validators/sql_validator.py`
-2. Implement minimal code to pass each test one at a time
-3. Use sqlparse library for SQL parsing
-4. Whitelist approach: only allow SELECT and WITH
-
-#### Step 4: Refactor (Tidy Phase)
-1. Extract constants for allowed/forbidden keywords
-2. Improve error messages
-3. Add logging for rejected queries
-
-#### Step 5: Integration
-1. Write integration test for sql_model using validator
-2. Modify `sql_model.py` to use SQLValidator
-3. Ensure all existing tests still pass
-
-### Commit Plan
-- Commit 1: [STRUCTURAL] Add SQL validator test infrastructure
-- Commit 2: [BEHAVIORAL] Add SQL validator with DROP rejection
-- Commit 3: [BEHAVIORAL] Add DELETE and INSERT rejection
-- Commit 4: [BEHAVIORAL] Add SELECT whitelist validation
-- Commit 5: [STRUCTURAL] Extract SQL keywords to constants
-- Commit 6: [BEHAVIORAL] Integrate SQL validator into sql_model
-
-## 2. Error Handling Framework
+## 1. Error Handling Framework
 
 ### Current State Analysis
 - **Locations**: Throughout codebase, especially `adapters/`
@@ -116,7 +68,7 @@ def test_exception_chaining()
 - Commit 5: [BEHAVIORAL] Remove silent failures in database.py
 - Commit 6: [BEHAVIORAL] Apply same pattern to other adapters
 
-## 3. Database Connection Reliability
+## 2. Database Connection Reliability
 
 ### Current State Analysis
 - **Location**: `src/agent/adapters/database.py`
@@ -175,7 +127,7 @@ def test_max_retry_limit()
 - Commit 5: [STRUCTURAL] Extract retry logic to decorator
 - Commit 6: [BEHAVIORAL] Apply retry to all database operations
 
-## 4. Input Validation Framework
+## 3. Input Validation Framework
 
 ### Current State Analysis
 - **Issue**: Limited validation on user inputs
@@ -217,14 +169,14 @@ def test_validate_question_structure()
 ## Execution Timeline
 
 ### Week 1
-- Day 1-2: SQL Injection Protection
-- Day 3-4: Error Handling Framework (Part 1)
+- Day 1-2: Error Handling Framework
+- Day 3-4: Database Connection Reliability (Part 1)
 - Day 5: Integration testing and fixes
 
 ### Week 2
-- Day 1-2: Error Handling Framework (Part 2)
-- Day 3-4: Database Connection Reliability
-- Day 5: Input Validation & Final integration
+- Day 1-2: Database Connection Reliability (Part 2)
+- Day 3-4: Input Validation Framework
+- Day 5: Final integration and testing
 
 ## Success Criteria
 
@@ -245,7 +197,6 @@ Each implementation must meet:
 
 ## Dependencies
 
-- `sqlparse` for SQL parsing
 - `asyncpg` for async PostgreSQL operations
 - `pytest-asyncio` for async testing
 - Existing test infrastructure must be working

@@ -4,6 +4,7 @@ from loguru import logger
 
 from src.agent.adapters import adapter
 from src.agent.domain import commands, events
+from src.agent.exceptions import AgentException
 
 Message = Union[commands.Command, events.Event]
 
@@ -65,6 +66,9 @@ class MessageBus:
         """
         Handles incoming commands and collects new commands/events from the agent.events list.
 
+        If an exception occurs, it automatically creates a FailedRequest event
+        to notify the user via WebSocket/notifications.
+
         Args:
             command: commands.Command: The command to handle.
         """
@@ -73,9 +77,33 @@ class MessageBus:
             handler = self.command_handlers[type(command)]
             handler(command)
             self.queue.extend(self.adapter.collect_new_events())
-        except Exception:
+        except Exception as e:
             logger.exception("Exception handling command %s", command)
-            raise
+
+            # Create FailedRequest event to notify user
+            # Extract question and q_id from command if available
+            question = getattr(command, "question", None) or "Unknown"
+            q_id = getattr(command, "q_id", None) or "unknown"
+
+            # Create user-friendly error message
+            if isinstance(e, AgentException):
+                # For our custom exceptions, use the message directly
+                # Context is logged but not sent to user for security
+                error_message = str(e)
+            else:
+                # For unexpected exceptions, provide generic message
+                error_message = f"An error occurred while processing your request: {type(e).__name__}"
+
+            # Create and queue the FailedRequest event
+            failed_event = events.FailedRequest(
+                question=question, exception=error_message, q_id=q_id
+            )
+
+            # Add to queue so it gets processed
+            self.queue.append(failed_event)
+
+            # Don't re-raise - let the FailedRequest event notify the user
+            # This ensures the message bus continues processing
 
     def handle_event(
         self,
