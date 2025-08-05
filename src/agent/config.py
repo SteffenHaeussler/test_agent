@@ -225,3 +225,75 @@ def get_evaluation_database_config():
         db_type="postgres",
         db_name=db_name,
     )
+
+
+def get_rate_limit_config():
+    """Get rate limiting configuration from environment variables."""
+
+    def safe_bool(value, default=True):
+        """Safely convert string to boolean with fallback."""
+        if not value:
+            return default
+        try:
+            return value.lower() in ("true", "1", "yes", "on")
+        except (AttributeError, ValueError):
+            return default
+
+    def safe_int(value, default):
+        """Safely convert string to int with fallback."""
+        try:
+            return int(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    def safe_float(value, default):
+        """Safely convert string to float with fallback."""
+        try:
+            return float(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    # Basic configuration
+    enabled = safe_bool(getenv("RATE_LIMIT_ENABLED"), True)
+    default_capacity = safe_int(getenv("RATE_LIMIT_DEFAULT_CAPACITY"), 60)
+    default_refill_rate = safe_float(getenv("RATE_LIMIT_DEFAULT_REFILL_RATE"), 1.0)
+    cleanup_interval = safe_int(getenv("RATE_LIMIT_CLEANUP_INTERVAL"), 300)
+
+    # Per-command limits
+    per_command_limits = {}
+
+    # Question command limits
+    question_capacity = safe_int(
+        getenv("RATE_LIMIT_QUESTION_CAPACITY"), default_capacity
+    )
+    question_refill_rate = safe_float(
+        getenv("RATE_LIMIT_QUESTION_REFILL_RATE"), default_refill_rate
+    )
+
+    if getenv("RATE_LIMIT_QUESTION_CAPACITY") or getenv(
+        "RATE_LIMIT_QUESTION_REFILL_RATE"
+    ):
+        per_command_limits["Question"] = {
+            "capacity": question_capacity,
+            "refill_rate": question_refill_rate,
+        }
+
+    # SQL Question command limits
+    sql_capacity = safe_int(getenv("RATE_LIMIT_SQL_CAPACITY"), default_capacity)
+    sql_refill_rate = safe_float(
+        getenv("RATE_LIMIT_SQL_REFILL_RATE"), default_refill_rate
+    )
+
+    if getenv("RATE_LIMIT_SQL_CAPACITY") or getenv("RATE_LIMIT_SQL_REFILL_RATE"):
+        per_command_limits["SQLQuestion"] = {
+            "capacity": sql_capacity,
+            "refill_rate": sql_refill_rate,
+        }
+
+    return dict(
+        enabled=enabled,
+        default_capacity=default_capacity,
+        default_refill_rate=default_refill_rate,
+        cleanup_interval=cleanup_interval,
+        per_command_limits=per_command_limits,
+    )

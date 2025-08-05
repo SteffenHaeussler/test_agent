@@ -92,6 +92,19 @@ class SQLValidator:
         logger.debug("SQL query validated successfully")
         return True
 
+    @classmethod
+    def from_config(cls, config) -> "SQLValidator":
+        """
+        Create SQL validator from configuration.
+
+        Args:
+            config: ValidatorConfig instance
+
+        Returns:
+            Configured SQLValidator instance
+        """
+        return cls()
+
     def _contains_multiple_statements(self, sql_query: str) -> bool:
         """
         Check if SQL contains multiple statements.

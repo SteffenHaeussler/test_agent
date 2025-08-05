@@ -210,6 +210,22 @@ class SQLValidationException(ValidationException):
     pass
 
 
+class RateLimitException(ValidationException):
+    """
+    Exception raised when rate limits are exceeded.
+
+    Common contexts:
+    - key: The rate limit key (user_id, ip_address, etc.)
+    - limit: The rate limit capacity
+    - remaining: Number of remaining tokens/requests
+    - retry_after: Seconds until rate limit resets
+    - reset_time: Timestamp when rate limit resets
+    - window: Rate limit window in seconds
+    """
+
+    pass
+
+
 # Agent State Machine Exceptions
 class AgentStateException(AgentException):
     """Base class for agent state machine related exceptions."""
@@ -345,6 +361,7 @@ __all__ = [
     "ValidationException",
     "InputValidationException",
     "SQLValidationException",
+    "RateLimitException",
     # Agent state exceptions
     "AgentStateException",
     "InvalidStateTransitionException",

@@ -10,6 +10,7 @@ from src.agent.exceptions import (
     DatabaseQueryException,
     DatabaseTransactionException,
 )
+from src.agent.utils.retry import with_database_retry
 
 
 class AbstractDatabase(ABC):
@@ -71,6 +72,7 @@ class BaseDatabaseAdapter(AbstractDatabase):
         self.db_type = kwargs.get("db_type", "postgres")
         self.engine = None
 
+    @with_database_retry(max_retries=3, initial_delay=1.0)
     def _get_connection(self) -> Any:
         """
         Get database connection based on database type.
@@ -118,6 +120,7 @@ class BaseDatabaseAdapter(AbstractDatabase):
             self.engine = None
             logger.info("Disconnected from database")
 
+    @with_database_retry(max_retries=3, initial_delay=1.0)
     def execute_query(
         self,
         sql_statement: str,
@@ -164,6 +167,7 @@ class BaseDatabaseAdapter(AbstractDatabase):
                 original_exception=e,
             )
 
+    @with_database_retry(max_retries=3, initial_delay=1.0)
     def get_schema(self) -> Dict[str, Any]:
         """
         Get the schema of the database.
@@ -212,6 +216,7 @@ class BaseDatabaseAdapter(AbstractDatabase):
         """
         return self.insert_batch(table_name, [data])
 
+    @with_database_retry(max_retries=3, initial_delay=1.0)
     def insert_batch(self, table_name: str, data_list: List[Dict[str, Any]]) -> bool:
         """
         Insert multiple rows of data into a table in a single transaction.
