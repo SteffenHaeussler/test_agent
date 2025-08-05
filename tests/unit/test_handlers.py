@@ -1,7 +1,6 @@
 from collections import defaultdict
 
 import pandas as pd
-import pytest
 
 from src.agent.adapters.adapter import (
     AbstractAdapter,
@@ -12,7 +11,6 @@ from src.agent.adapters.adapter import (
 from src.agent.adapters.notifications import AbstractNotifications
 from src.agent.bootstrap import bootstrap
 from src.agent.domain import commands, events
-from src.agent.service_layer.handlers import InvalidQuestion
 
 
 class FakeAgentAdapter(AbstractAdapter):
@@ -185,10 +183,29 @@ class TestAnswer:
         assert agent.question == "test query"
 
     def test_answer_invalid_question(self):
-        bus = bootstrap_test_app()
+        # With the new error handling, InvalidQuestion creates a FailedRequest event
+        # We need to mock the event handler to verify this
+        failed_request_handler = []
 
-        with pytest.raises(InvalidQuestion, match="No question asked"):
-            bus.handle(commands.Question(question="", q_id="test_session_id"))
+        def capture_failed_request(event, notifications=None):
+            failed_request_handler.append(event)
+
+        # Create custom event handlers that capture FailedRequest
+        event_handlers = defaultdict(list)
+        event_handlers[events.FailedRequest].append(capture_failed_request)
+
+        # Create bus with custom handlers
+        adapter = FakeRouterAdapter()
+        bus = bootstrap(adapter=adapter)
+        bus.event_handlers = event_handlers
+
+        # Handle invalid question
+        bus.handle(commands.Question(question="", q_id="test_session_id"))
+
+        # Verify FailedRequest was created
+        assert len(failed_request_handler) == 1
+        assert isinstance(failed_request_handler[0], events.FailedRequest)
+        assert "InvalidQuestion" in failed_request_handler[0].exception
 
     def test_for_new_agent(self):
         bus = bootstrap_test_app()
@@ -277,10 +294,28 @@ class TestQuery:
         assert agent.question == "test query"
 
     def test_sql_invalid_question(self):
-        bus = bootstrap_test_app()
+        # With the new error handling, InvalidQuestion creates a FailedRequest event
+        failed_request_handler = []
 
-        with pytest.raises(InvalidQuestion, match="No question asked"):
-            bus.handle(commands.SQLQuestion(question="", q_id="test_sql_id"))
+        def capture_failed_request(event, notifications=None):
+            failed_request_handler.append(event)
+
+        # Create custom event handlers that capture FailedRequest
+        event_handlers = defaultdict(list)
+        event_handlers[events.FailedRequest].append(capture_failed_request)
+
+        # Create bus with custom handlers
+        adapter = FakeRouterAdapter()
+        bus = bootstrap(adapter=adapter)
+        bus.event_handlers = event_handlers
+
+        # Handle invalid question
+        bus.handle(commands.SQLQuestion(question="", q_id="test_sql_id"))
+
+        # Verify FailedRequest was created
+        assert len(failed_request_handler) == 1
+        assert isinstance(failed_request_handler[0], events.FailedRequest)
+        assert "InvalidQuestion" in failed_request_handler[0].exception
 
     def test_sql_for_new_agent(self):
         bus = bootstrap_test_app()
@@ -374,10 +409,28 @@ class TestScenario:
         assert agent.question == "test scenario"
 
     def test_scenario_invalid_question(self):
-        bus = bootstrap_test_app()
+        # With the new error handling, InvalidQuestion creates a FailedRequest event
+        failed_request_handler = []
 
-        with pytest.raises(InvalidQuestion, match="No question asked"):
-            bus.handle(commands.Scenario(question="", q_id="test_scenario_id"))
+        def capture_failed_request(event, notifications=None):
+            failed_request_handler.append(event)
+
+        # Create custom event handlers that capture FailedRequest
+        event_handlers = defaultdict(list)
+        event_handlers[events.FailedRequest].append(capture_failed_request)
+
+        # Create bus with custom handlers
+        adapter = FakeRouterAdapter()
+        bus = bootstrap(adapter=adapter)
+        bus.event_handlers = event_handlers
+
+        # Handle invalid question
+        bus.handle(commands.Scenario(question="", q_id="test_scenario_id"))
+
+        # Verify FailedRequest was created
+        assert len(failed_request_handler) == 1
+        assert isinstance(failed_request_handler[0], events.FailedRequest)
+        assert "InvalidQuestion" in failed_request_handler[0].exception
 
     def test_scenario_for_new_agent(self):
         bus = bootstrap_test_app()
