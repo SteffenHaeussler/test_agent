@@ -245,6 +245,6 @@ class TestAgent:
 
         with pytest.raises(
             NotImplementedError,
-            match=f"Not implemented yet for BaseAgent: {type(command)}",
+            match=f"No handler registered for command type: {type(command).__name__}",
         ):
             agent.update(command)

@@ -186,3 +186,20 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Node/Frontend files (not needed for this Python backend)
+node_modules/
+package.json
+package-lock.json
+yarn.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tsx
+*.ts
+!*.py
+webpack.config.js
+babel.config.js
+.eslintrc*
+.prettierrc*
+tsconfig.json

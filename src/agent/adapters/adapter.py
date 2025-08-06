@@ -8,6 +8,7 @@ from sqlalchemy import MetaData
 from src.agent import config
 from src.agent.adapters import agent_tools, database, llm, rag
 from src.agent.domain import commands, model
+from src.agent.utils.constants import TraceNames
 
 
 class AbstractAdapter(ABC):
@@ -222,7 +223,7 @@ class AgentAdapter(AbstractAdapter):
         langfuse = get_client()
 
         langfuse.update_current_trace(
-            name="enhance",
+            name=TraceNames.ENHANCE,
             session_id=command.q_id,
         )
 
@@ -279,7 +280,7 @@ class AgentAdapter(AbstractAdapter):
         langfuse = get_client()
 
         langfuse.update_current_trace(
-            name="finalize",
+            name=TraceNames.FINALIZE,
             session_id=command.q_id,
         )
 
@@ -829,7 +830,7 @@ class ScenarioAdapter(AbstractAdapter):
         langfuse = get_client()
 
         langfuse.update_current_trace(
-            name="finalize",
+            name=TraceNames.FINALIZE,
             session_id=command.q_id,
         )
         response = self.llm.use(command.question, commands.ScenarioResponse)

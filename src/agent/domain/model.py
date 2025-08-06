@@ -5,6 +5,19 @@ import yaml
 
 from src.agent.domain import commands, events
 from src.agent.utils import populate_template
+from src.agent.utils.command_registry import CommandHandlerRegistry
+from src.agent.utils.constants import PromptKeys, ErrorMessages
+from src.agent.utils.command_handlers import (
+    QuestionHandler,
+    CheckHandler,
+    RetrieveHandler,
+    RerankHandler,
+    EnhanceHandler,
+    UseToolsHandler,
+    LLMResponseHandler,
+    FinalCheckHandler,
+)
+from src.agent.utils.config_manager import ConfigurationManager
 
 
 class BaseAgent:
@@ -42,9 +55,9 @@ class BaseAgent:
 
     def __init__(self, question: commands.Question, kwargs: Dict = None):
         if not question or not question.question:
-            raise ValueError("Question is required to enhance")
+            raise ValueError(ErrorMessages.QUESTION_REQUIRED_ENHANCE)
 
-        self.kwargs = kwargs
+        self.kwargs = kwargs or {}
         self.events = []
         self.is_answered = False
 
@@ -58,7 +71,105 @@ class BaseAgent:
         self.send_response = None
         self.tool_answer = None
 
+        # Initialize ConfigurationManager for centralized configuration
+        self.config_manager = ConfigurationManager()
+
         self.base_prompts = self.init_prompts()
+
+        # Initialize command registry with handlers
+        self.command_registry = CommandHandlerRegistry()
+        self._register_command_handlers()
+
+    def _register_command_handlers(self) -> None:
+        """
+        Register all command handlers with the registry.
+
+        This method sets up the Strategy pattern for command processing,
+        replacing the match/case logic with a more maintainable registry.
+        """
+        self.command_registry.register(commands.Question, QuestionHandler())
+        self.command_registry.register(commands.Check, CheckHandler())
+        self.command_registry.register(commands.Retrieve, RetrieveHandler())
+        self.command_registry.register(commands.Rerank, RerankHandler())
+        self.command_registry.register(commands.Enhance, EnhanceHandler())
+        self.command_registry.register(commands.UseTools, UseToolsHandler())
+        self.command_registry.register(commands.LLMResponse, LLMResponseHandler())
+        self.command_registry.register(commands.FinalCheck, FinalCheckHandler())
+
+    def _get_prompt_template(self, command: commands.Command) -> str:
+        """
+        Get the appropriate prompt template for the given command type.
+
+        Args:
+            command: The command to get the template for
+
+        Returns:
+            The prompt template string
+
+        Raises:
+            ValueError: If command type is invalid or template is not found
+        """
+        if type(command) is commands.UseTools:
+            template = self.base_prompts.get(PromptKeys.FINALIZE, None)
+        elif type(command) is commands.Rerank:
+            template = self.base_prompts.get(PromptKeys.ENHANCE, None)
+        elif type(command) is commands.Question:
+            template = self.base_prompts.get(PromptKeys.GUARDRAILS, {}).get(
+                PromptKeys.PRE_CHECK, None
+            )
+        elif type(command) is commands.LLMResponse:
+            template = self.base_prompts.get(PromptKeys.GUARDRAILS, {}).get(
+                PromptKeys.POST_CHECK, None
+            )
+        else:
+            raise ValueError(ErrorMessages.INVALID_COMMAND_TYPE)
+
+        if template is None:
+            raise ValueError(ErrorMessages.PROMPT_NOT_FOUND)
+
+        return template
+
+    def _get_prompt_variables(
+        self, command: commands.Command, memory: List[str] = None
+    ) -> dict:
+        """
+        Get the variables dictionary for template population based on command type.
+
+        Args:
+            command: The command to extract variables from
+            memory: Optional memory context for LLMResponse commands
+
+        Returns:
+            Dictionary of variables for template population
+
+        Raises:
+            ValueError: If command type is invalid
+        """
+        if type(command) is commands.UseTools:
+            return {
+                "question": command.question,
+                "response": command.response,
+            }
+        elif type(command) is commands.Rerank:
+            candidates = [i.model_dump() for i in command.candidates]
+            candidates_json = json.dumps(candidates)
+            return {
+                "question": command.question,
+                "information": candidates_json,
+            }
+        elif type(command) is commands.Question:
+            return {
+                "question": command.question,
+            }
+        elif type(command) is commands.LLMResponse:
+            memory_str = "\n".join(memory) if memory else ""
+            return {
+                "question": command.question,
+                "response": command.response,
+                "memory": memory_str,
+            }
+        else:
+            raise ValueError("Invalid command type")
 
     def create_prompt(
         self,
@@ -68,78 +179,56 @@ class BaseAgent:
         """
         Gets and preprocesses the prompt by the incoming command.
 
+        This method has been refactored to use smaller, focused helper methods
+        for better maintainability and testability.
+
         Args:
-            command: commands.Command: The command to create the prompt for.
+            command: The command to create the prompt for
+            memory: Optional memory context for certain commands
 
         Returns:
-            prompt: str: The prepared prompt for the command.
+            The prepared prompt for the command
+
+        Raises:
+            ValueError: If command type is invalid or template is not found
         """
-        if type(command) is commands.UseTools:
-            prompt = self.base_prompts.get("finalize", None)
-        elif type(command) is commands.Rerank:
-            prompt = self.base_prompts.get("enhance", None)
-        elif type(command) is commands.Question:
-            prompt = self.base_prompts.get("guardrails", {}).get("pre_check", None)
-        elif type(command) is commands.LLMResponse:
-            prompt = self.base_prompts.get("guardrails", {}).get("post_check", None)
-        else:
-            raise ValueError("Invalid command type")
+        template = self._get_prompt_template(command)
+        variables = self._get_prompt_variables(command, memory)
 
-        if prompt is None:
-            raise ValueError("Prompt not found")
-
-        if type(command) is commands.UseTools:
-            prompt = populate_template(
-                prompt,
-                {
-                    "question": command.question,
-                    "response": command.response,
-                },
-            )
-        elif type(command) is commands.Rerank:
-            candidates = [i.model_dump() for i in command.candidates]
-            candidates = json.dumps(candidates)
-
-            prompt = populate_template(
-                prompt,
-                {
-                    "question": command.question,
-                    "information": candidates,
-                },
-            )
-        elif type(command) is commands.Question:
-            prompt = populate_template(
-                prompt,
-                {
-                    "question": command.question,
-                },
-            )
-        elif type(command) is commands.LLMResponse:
-            prompt = populate_template(
-                prompt,
-                {
-                    "question": command.question,
-                    "response": command.response,
-                    "memory": "\n".join(memory),
-                },
-            )
-        else:
-            raise ValueError("Invalid command type")
-
-        return prompt
+        return populate_template(template, variables)
 
     def init_prompts(self) -> Dict:
         """
         Initialize the prompts for the agent.
 
+        Uses ConfigurationManager to get prompt path if not provided in kwargs,
+        maintaining backward compatibility.
+
         Returns:
             base_prompts: Dict: The base prompts for the agent.
+
+        Raises:
+            ValueError: If prompt path is not found or file cannot be loaded
         """
+        # Get prompt path from kwargs (backward compatibility) or ConfigurationManager
+        if "prompt_path" in self.kwargs:
+            prompt_path = self.kwargs["prompt_path"]
+        else:
+            try:
+                agent_config = self.config_manager.get_agent_config()
+                prompt_path = agent_config["prompt_path"]
+            except Exception as e:
+                raise ValueError(ErrorMessages.CONFIG_PATH_ERROR.format(error=e))
+
         try:
-            with open(self.kwargs["prompt_path"], "r") as file:
+            with open(prompt_path, "r") as file:
                 base_prompts = yaml.safe_load(file)
         except FileNotFoundError:
-            raise ValueError("Prompt path not found")
+            raise ValueError(
+                ErrorMessages.PROMPT_PATH_NOT_FOUND.format(path=prompt_path)
+            )
+        except Exception as e:
+            raise ValueError(ErrorMessages.ERROR_LOADING_PROMPTS.format(error=e))
 
         return base_prompts
 
@@ -262,7 +351,7 @@ class BaseAgent:
             new_command: commands.FinalCheck: The new command.
         """
         if self.tool_answer is None:
-            raise ValueError("Tool answer is required for LLM response")
+            raise ValueError(ErrorMessages.TOOL_ANSWER_REQUIRED)
 
         response = events.Response(
             question=self.question,
@@ -347,7 +436,7 @@ class BaseAgent:
             self.is_answered = True
             self.response = events.FailedRequest(
                 question=self.question,
-                exception="Internal error: Duplicate command",
+                exception=ErrorMessages.DUPLICATE_COMMAND,
                 q_id=self.q_id,
             )
 
@@ -371,27 +460,6 @@ class BaseAgent:
         if self.is_answered:
             return None
 
-        # following the command chain
-        match command:
-            case commands.Question():
-                new_command = self.prepare_guardrails_check(command)
-            case commands.Check():
-                new_command = self.prepare_retrieval(command)
-            case commands.Retrieve():
-                new_command = self.prepare_rerank(command)
-            case commands.Rerank():
-                new_command = self.prepare_enhancement(command)
-            case commands.Enhance():
-                new_command = self.prepare_agent_call(command)
-            case commands.UseTools():
-                new_command = self.prepare_finalization(command)
-            case commands.LLMResponse():
-                new_command = self.prepare_response(command)
-            case commands.FinalCheck():
-                new_command = self.prepare_evaluation(command)
-            case _:
-                raise NotImplementedError(
-                    f"Not implemented yet for BaseAgent: {type(command)}"
-                )
-
+        # Process command using the registry (Strategy pattern)
+        new_command = self.command_registry.process(command, self)
         return new_command

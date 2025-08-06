@@ -7,6 +7,7 @@ from loguru import logger
 
 from src.agent.domain import commands, events
 from src.agent.utils import populate_template
+from src.agent.utils.constants import ErrorMessages
 from src.agent.validators.sql_validator import SQLValidator
 
 
@@ -47,7 +48,7 @@ class SQLBaseAgent:
 
     def __init__(self, question: commands.Question, kwargs: Dict = None):
         if not question or not question.question:
-            raise ValueError("Question is required to enhance")
+            raise ValueError(ErrorMessages.QUESTION_REQUIRED_ENHANCE)
 
         self.kwargs = kwargs
         self.events = []
@@ -447,7 +448,7 @@ class SQLBaseAgent:
             self.is_answered = True
             self.response = events.FailedRequest(
                 question=self.question,
-                exception="Internal error: Duplicate command",
+                exception=ErrorMessages.DUPLICATE_COMMAND,
                 q_id=self.q_id,
             )
 
