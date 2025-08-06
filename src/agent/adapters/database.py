@@ -10,6 +10,7 @@ from src.agent.exceptions import (
     DatabaseQueryException,
     DatabaseTransactionException,
 )
+from src.agent.utils.constants import Database
 
 
 class AbstractDatabase(ABC):
@@ -68,7 +69,7 @@ class BaseDatabaseAdapter(AbstractDatabase):
         self.kwargs = kwargs
         self.schema_info = None
         self.connection_string = kwargs.get("connection_string")
-        self.db_type = kwargs.get("db_type", "postgres")
+        self.db_type = kwargs.get("db_type", Database.TYPE_POSTGRES)
         self.engine = None
 
     def _get_connection(self) -> Any:

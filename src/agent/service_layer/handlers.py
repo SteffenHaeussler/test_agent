@@ -7,6 +7,7 @@ from src.agent import config
 from src.agent.adapters.adapter import AbstractAdapter
 from src.agent.adapters.notifications import AbstractNotifications
 from src.agent.domain import commands, events, model, scenario_model, sql_model
+from src.agent.utils.constants import ErrorMessages, StatusMessages, TraceNames
 
 
 class InvalidQuestion(Exception):
@@ -33,12 +34,12 @@ def answer(
     langfuse = get_client()
 
     langfuse.update_current_trace(
-        name="answer handler",
+        name=TraceNames.ANSWER_HANDLER,
         session_id=command.q_id,
     )
 
     if not command or not command.question:
-        raise InvalidQuestion("No question asked")
+        raise InvalidQuestion(ErrorMessages.NO_QUESTION_ASKED)
 
     agent = model.BaseAgent(command, config.get_agent_config())
     adapter.add(agent)
@@ -100,11 +101,11 @@ def query(
     langfuse = get_client()
 
     langfuse.update_current_trace(
-        name="query handler",
+        name=TraceNames.QUERY_HANDLER,
         session_id=command.q_id,
     )
     if not command or not command.question:
-        raise InvalidQuestion("No question asked")
+        raise InvalidQuestion(ErrorMessages.NO_QUESTION_ASKED)
 
     agent = sql_model.SQLBaseAgent(command, config.get_agent_config())
     adapter.add(agent)
@@ -155,11 +156,11 @@ def scenario(
     langfuse = get_client()
 
     langfuse.update_current_trace(
-        name="query handler",
+        name=TraceNames.QUERY_HANDLER,
         session_id=command.q_id,
     )
     if not command or not command.question:
-        raise InvalidQuestion("No question asked")
+        raise InvalidQuestion(ErrorMessages.NO_QUESTION_ASKED)
 
     agent = scenario_model.ScenarioBaseAgent(command, config.get_agent_config())
     adapter.add(agent)
@@ -219,7 +220,7 @@ def send_response(
     langfuse = get_client()
 
     langfuse.update_current_trace(
-        name="send_response handler",
+        name=TraceNames.SEND_RESPONSE_HANDLER,
         session_id=event.q_id,
     )
 
@@ -246,7 +247,7 @@ def send_failure(
     langfuse = get_client()
 
     langfuse.update_current_trace(
-        name="send_rejected handler",
+        name=TraceNames.SEND_REJECTED_HANDLER,
         session_id=event.q_id,
     )
 
@@ -274,7 +275,7 @@ def send_status_update(
     langfuse = get_client()
 
     langfuse.update_current_trace(
-        name="send_status_update handler",
+        name=TraceNames.SEND_STATUS_UPDATE_HANDLER,
         session_id=event.q_id,
     )
 
@@ -302,24 +303,24 @@ COMMAND_HANDLERS = {
 
 # Step name mapping for status updates
 STEP_NAMES = {
-    commands.Question: "Processing...",
-    commands.Check: "Checking...",
-    commands.Retrieve: "Retrieving...",
-    commands.Rerank: "Enhancing...",
-    commands.Enhance: "Finetuning...",
-    commands.UseTools: "Answering...",
-    commands.LLMResponse: "Finalizing...",
-    commands.FinalCheck: "Evaluating...",
-    commands.SQLQuestion: "Processing...",
-    commands.SQLCheck: "Checking...",
-    commands.SQLGrounding: "Grounding...",
-    commands.SQLFilter: "Filtering...",
-    commands.SQLJoinInference: "Joining...",
-    commands.SQLAggregation: "Aggregating...",
-    commands.SQLConstruction: "Constructing...",
-    commands.SQLValidation: "Validating...",
-    commands.SQLExecution: "Executing...",
-    commands.Scenario: "Processing...",
-    commands.ScenarioLLMResponse: "Thinking...",
-    commands.ScenarioFinalCheck: "Evaluating...",
+    commands.Question: StatusMessages.PROCESSING,
+    commands.Check: StatusMessages.CHECKING,
+    commands.Retrieve: StatusMessages.RETRIEVING,
+    commands.Rerank: StatusMessages.ENHANCING,
+    commands.Enhance: StatusMessages.FINETUNING,
+    commands.UseTools: StatusMessages.ANSWERING,
+    commands.LLMResponse: StatusMessages.FINALIZING,
+    commands.FinalCheck: StatusMessages.EVALUATING,
+    commands.SQLQuestion: StatusMessages.PROCESSING,
+    commands.SQLCheck: StatusMessages.CHECKING,
+    commands.SQLGrounding: StatusMessages.GROUNDING,
+    commands.SQLFilter: StatusMessages.FILTERING,
+    commands.SQLJoinInference: StatusMessages.JOINING,
+    commands.SQLAggregation: StatusMessages.AGGREGATING,
+    commands.SQLConstruction: StatusMessages.CONSTRUCTING,
+    commands.SQLValidation: StatusMessages.VALIDATING,
+    commands.SQLExecution: StatusMessages.EXECUTING,
+    commands.Scenario: StatusMessages.PROCESSING,
+    commands.ScenarioLLMResponse: StatusMessages.THINKING,
+    commands.ScenarioFinalCheck: StatusMessages.EVALUATING,
 }

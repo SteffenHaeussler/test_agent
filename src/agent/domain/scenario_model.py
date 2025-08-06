@@ -7,6 +7,7 @@ import yaml
 from src.agent.adapters import tools
 from src.agent.domain import commands, events
 from src.agent.utils import populate_template
+from src.agent.utils.constants import ErrorMessages
 
 tool_names = tools.__all__
 
@@ -272,7 +273,7 @@ class ScenarioBaseAgent:
             self.is_answered = True
             self.response = events.FailedRequest(
                 question=self.question,
-                exception="Internal error: Duplicate command",
+                exception=ErrorMessages.DUPLICATE_COMMAND,
                 q_id=self.q_id,
             )
 

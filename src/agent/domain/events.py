@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel
+from src.agent.utils.constants import EventMessages
 
 
 class Event(BaseModel, ABC):
@@ -23,7 +24,7 @@ class Event(BaseModel, ABC):
 
 class EndOfEvent(Event):
     q_id: str
-    response: str = "end"
+    response: str = EventMessages.END_RESPONSE
 
     def to_event_string(self) -> str:
         return f"event: {self.to_message()}"

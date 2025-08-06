@@ -14,6 +14,8 @@ error conditions, making debugging and error handling more effective.
 import re
 from typing import Any, Dict, List, Optional, Set
 
+from src.agent.utils.constants import Security
+
 
 class AgentException(Exception):
     """
@@ -32,30 +34,10 @@ class AgentException(Exception):
     """
 
     # Sensitive keys that should be filtered from context when logging
-    _SENSITIVE_KEYS: Set[str] = {
-        "password",
-        "passwd",
-        "pwd",
-        "secret",
-        "api_key",
-        "token",
-        "auth",
-        "authorization",
-        "credential",
-        "key",
-        "private_key",
-        "connection_string",
-        "database_url",
-        "dsn",
-    }
+    _SENSITIVE_KEYS: Set[str] = Security.SENSITIVE_KEYS
 
     # Patterns for sensitive data in string values
-    _SENSITIVE_PATTERNS: List[str] = [
-        r"password=[\w\-_]+",
-        r"://[^:]+:[^@]+@",  # URLs with credentials
-        r"Bearer\s+[\w\-_\.]+",  # Bearer tokens
-        r"key_[\w\-_]+",  # API keys
-    ]
+    _SENSITIVE_PATTERNS: List[str] = Security.SENSITIVE_PATTERNS
 
     def __init__(
         self,
@@ -99,7 +81,7 @@ class AgentException(Exception):
         sanitized = {}
         for key, value in self.context.items():
             if self._is_sensitive_key(key):
-                sanitized[key] = "[FILTERED]"
+                sanitized[key] = Security.FILTERED_PLACEHOLDER
             elif isinstance(value, str) and self._contains_sensitive_data(value):
                 sanitized[key] = self._filter_sensitive_patterns(value)
             else:
@@ -123,7 +105,10 @@ class AgentException(Exception):
         filtered_value = value
         for pattern in self._SENSITIVE_PATTERNS:
             filtered_value = re.sub(
-                pattern, "[FILTERED]", filtered_value, flags=re.IGNORECASE
+                pattern,
+                Security.FILTERED_PLACEHOLDER,
+                filtered_value,
+                flags=re.IGNORECASE,
             )
         return filtered_value
 
