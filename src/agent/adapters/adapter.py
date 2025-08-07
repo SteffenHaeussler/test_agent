@@ -1,4 +1,6 @@
+import asyncio
 from abc import ABC
+from typing import Any, Dict, Union
 
 from langfuse import get_client, observe
 from loguru import logger
@@ -82,13 +84,25 @@ class RouterAdapter(AbstractAdapter):
         """Route to appropriate adapter based on command type."""
         return self.agent_adapter.answer(command)
 
+    async def answer_async(self, command):
+        """Route to appropriate adapter based on command type (async)."""
+        return await self.agent_adapter.answer_async(command)
+
     def query(self, command):
         """Route to appropriate adapter based on command type."""
         return self.sql_adapter.query(command)
 
+    async def query_async(self, command):
+        """Route to appropriate adapter based on command type (async)."""
+        return await self.sql_adapter.query_async(command)
+
     def scenario(self, command):
         """Route to appropriate adapter based on command type."""
         return self.scenario_adapter.query(command)
+
+    async def scenario_async(self, command):
+        """Route to appropriate adapter based on command type (async)."""
+        return await self.scenario_adapter.query_async(command)
 
     def add(self, agent):
         """Add agent to both adapters."""
@@ -176,6 +190,39 @@ class AgentAdapter(AbstractAdapter):
                 response = self.finalize(command)
             case commands.FinalCheck():
                 response = self.evaluate(command)
+            case _:
+                raise NotImplementedError(
+                    f"Not implemented in AgentAdapter: {type(command)}"
+                )
+        return response
+
+    async def answer_async(self, command: commands.Command) -> commands.Command:
+        """
+        Answer a command asynchronously. Processes each request by the command type
+
+        Args:
+            command: commands.Command: The command to answer.
+
+        Returns:
+            commands.Command: The command to answer.
+        """
+        match command:
+            case commands.Question():
+                response = self.question(command)
+            case commands.Check():
+                response = await self.check_async(command)
+            case commands.Retrieve():
+                response = await self.retrieve_async(command)
+            case commands.Rerank():
+                response = await self.rerank_async(command)
+            case commands.Enhance():
+                response = await self.enhance_async(command)
+            case commands.UseTools():
+                response = await self.use_async(command)
+            case commands.LLMResponse():
+                response = await self.finalize_async(command)
+            case commands.FinalCheck():
+                response = await self.evaluate_async(command)
             case _:
                 raise NotImplementedError(
                     f"Not implemented in AgentAdapter: {type(command)}"
@@ -324,6 +371,11 @@ class AgentAdapter(AbstractAdapter):
         """
         candidates = []
 
+        # Log once at the beginning instead of for each call
+        num_candidates = len(command.candidates)
+        if num_candidates > 0:
+            logger.debug(f"Reranking {num_candidates} candidates")
+
         for candidate in command.candidates:
             response = self.rag.rerank(command.question, candidate.description)
 
@@ -334,6 +386,12 @@ class AgentAdapter(AbstractAdapter):
         candidates = sorted(candidates, key=lambda x: -x.score)
 
         command.candidates = candidates[: self.rag.n_ranking_candidates]
+
+        if num_candidates > 0:
+            logger.debug(
+                f"Reranking complete - kept top {len(command.candidates)} candidates"
+            )
+
         return command
 
     @observe()
@@ -399,6 +457,230 @@ class AgentAdapter(AbstractAdapter):
             command.response = response
 
         return command
+
+    # Async versions of all methods
+    @observe()
+    async def check_async(self, command: commands.Check) -> commands.Check:
+        """
+        Check the incoming question via guardrails (async).
+
+        Args:
+            command: commands.Check: The command to check.
+
+        Returns:
+            commands.Check: The command to check.
+        """
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
+            name="check_async",
+            session_id=command.q_id,
+        )
+        response = await self.guardrails.use_async(
+            command.question, commands.GuardrailPreCheckModel
+        )
+
+        command.response = response.response
+        command.chain_of_thought = response.chain_of_thought
+        command.approved = response.approved
+
+        return command
+
+    @observe()
+    async def enhance_async(self, command: commands.Enhance):
+        """
+        Enhance the question via LLM based on the reranked document (async).
+
+        Args:
+            command: commands.Enhance: The command to enhance the question.
+
+        Returns:
+            commands.Enhance: The command to enhance the question.
+        """
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
+            name=TraceNames.ENHANCE + "_async",
+            session_id=command.q_id,
+        )
+
+        response = await self.llm.use_async(command.question, commands.LLMResponseModel)
+
+        command.response = response.response
+        command.chain_of_thought = response.chain_of_thought
+
+        return command
+
+    @observe()
+    async def evaluate_async(self, command: commands.FinalCheck) -> commands.FinalCheck:
+        """
+        Evaluate the response via guardrails (async).
+
+        Args:
+            command: commands.FinalCheck: The command to evaluate.
+
+        Returns:
+            commands.FinalCheck: The command to evaluate.
+        """
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
+            name="evaluation_async",
+            session_id=command.q_id,
+        )
+        response = await self.guardrails.use_async(
+            command.question, commands.GuardrailPostCheckModel
+        )
+
+        command.chain_of_thought = response.chain_of_thought
+        command.approved = response.approved
+        command.summary = response.summary
+        command.issues = response.issues
+        command.plausibility = response.plausibility
+        command.factual_consistency = response.factual_consistency
+        command.clarity = response.clarity
+        command.completeness = response.completeness
+
+        return command
+
+    @observe()
+    async def finalize_async(
+        self, command: commands.LLMResponse
+    ) -> commands.LLMResponse:
+        """
+        Finalize the response via LLM (async).
+
+        Args:
+            command: commands.LLMResponse: The command to finalize the response.
+
+        Returns:
+            commands.LLMResponse: The command to finalize the response.
+        """
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
+            name=TraceNames.FINALIZE + "_async",
+            session_id=command.q_id,
+        )
+
+        response = await self.llm.use_async(command.question, commands.LLMResponseModel)
+
+        command.response = response.response
+        command.chain_of_thought = response.chain_of_thought
+
+        return command
+
+    @observe()
+    async def rerank_async(self, command: commands.Rerank):
+        """
+        Rerank the documents from the knowledge base (async).
+
+        Args:
+            command: commands.Rerank: The command to rerank the documents.
+
+        Returns:
+            commands.Rerank: The command to rerank the documents.
+        """
+        candidates = []
+
+        # Log once at the beginning instead of for each call
+        num_candidates = len(command.candidates)
+        if num_candidates > 0:
+            logger.debug(f"Reranking {num_candidates} candidates concurrently")
+
+        # Process reranking concurrently for better performance
+        rerank_tasks = []
+        for candidate in command.candidates:
+            rerank_tasks.append(
+                self.rag.rerank_async(command.question, candidate.description)
+            )
+
+        rerank_responses = await asyncio.gather(*rerank_tasks)
+
+        for candidate, response in zip(command.candidates, rerank_responses):
+            temp = candidate.model_dump()
+            temp.pop("score", None)
+            candidates.append(commands.RerankResponse(**response, **temp))
+
+        candidates = sorted(candidates, key=lambda x: -x.score)
+
+        command.candidates = candidates[: self.rag.n_ranking_candidates]
+
+        if num_candidates > 0:
+            logger.debug(
+                f"Reranking complete - kept top {len(command.candidates)} candidates"
+            )
+
+        return command
+
+    @observe()
+    async def retrieve_async(self, command: commands.Retrieve):
+        """
+        Retrieve the most relevant documents from the knowledge base (async).
+
+        Args:
+            command: commands.Retrieve: The command to retrieve the most relevant documents.
+
+        Returns:
+            commands.Retrieve: The command to retrieve the most relevant documents.
+        """
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
+            name="retrieve_async",
+            session_id=command.q_id,
+        )
+        candidates = []
+        response = await self.rag.embed_async(command.question)
+
+        if response is not None:
+            response = await self.rag.retrieve_async(response["embedding"])
+
+            for candidate in response["results"]:
+                candidates.append(commands.KBResponse(**candidate))
+
+        command.candidates = candidates
+        return command
+
+    @observe()
+    async def use_async(self, command: commands.UseTools) -> commands.UseTools:
+        """
+        Use the agent tools to process the question (async).
+
+        Args:
+            command: commands.UseTools: The command to use the agent tools.
+
+        Returns:
+            commands.UseTools: The command to use the agent tools.
+        """
+        langfuse = get_client()
+
+        langfuse.update_current_trace(
+            name="use_async",
+            session_id=command.q_id,
+        )
+        # Use thread wrapper since tools don't have async method yet
+        response, memory = await asyncio.to_thread(self.tools.use, command.question)
+
+        command.memory = memory
+
+        if isinstance(response, dict) and "data" in response:
+            command.data = response
+            command.response = (
+                "Response is a data extraction. FileStorage is not implemented yet."
+            )
+
+        elif isinstance(response, dict) and "plot" in response:
+            command.response = "Response is a plot."
+            command.data = response
+        else:
+            command.response = response
+
+        return command
+
+    # Placeholder async methods that wrap sync methods for compatibility
+    async def validation_async(self, command):
+        return await asyncio.to_thread(self.validation, command)
 
 
 class SQLAgentAdapter(AbstractAdapter):
@@ -519,45 +801,73 @@ class SQLAgentAdapter(AbstractAdapter):
 
         return command
 
-    def convert_schema(self, schema: MetaData) -> commands.DatabaseSchema:
+    def convert_schema(
+        self, schema: Union[MetaData, Dict[str, Any]]
+    ) -> commands.DatabaseSchema:
         """
         Convert the schema to a more readable format.
+        Handles both MetaData objects and dict schemas.
         """
 
         tables = []
-        for table_name, table in schema.tables.items():
-            # Create Column objects for each column
-            columns = []
-            for column in table.columns:
-                if column.name in ["created_at", "updated_at"]:
-                    continue
+        relationships = []
 
-                columns.append(
-                    commands.Column(
-                        name=column.name,
-                        type=str(column.type),
-                        description=column.description,
+        # Handle dict format (from sync implementation)
+        if isinstance(schema, dict):
+            for table_name, columns_list in schema.get("tables", {}).items():
+                # Create Column objects for each column
+                columns = []
+                for col_info in columns_list:
+                    if col_info["name"] in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=col_info["name"],
+                            type=col_info["type"],
+                            description=col_info.get("description", ""),
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(name=table_name, columns=columns, description="")
+                )
+
+        # Handle MetaData format (original)
+        else:
+            for table_name, table in schema.tables.items():
+                # Create Column objects for each column
+                columns = []
+                for column in table.columns:
+                    if column.name in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=column.name,
+                            type=str(column.type),
+                            description=column.description,
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(
+                        name=table_name, columns=columns, description=table.description
                     )
                 )
 
-            # Create Table object
-            tables.append(
-                commands.Table(
-                    name=table_name, columns=columns, description=table.description
-                )
-            )
-
-        # Build relationships list
-        relationships = []
-        for table_name, table in schema.tables.items():
-            for fk in table.foreign_keys:
-                relationship = commands.Relationship(
-                    table_name=table_name,
-                    column_name=fk.parent.name,
-                    foreign_table_name=fk.column.table.name,
-                    foreign_column_name=fk.column.name,
-                )
-                relationships.append(relationship)
+            # Build relationships list for MetaData format
+            for table_name, table in schema.tables.items():
+                for fk in table.foreign_keys:
+                    relationship = commands.Relationship(
+                        table_name=table_name,
+                        column_name=fk.parent.name,
+                        foreign_table_name=fk.column.table.name,
+                        foreign_column_name=fk.column.name,
+                    )
+                    relationships.append(relationship)
 
         new_schema = commands.DatabaseSchema(
             tables=tables,
@@ -676,6 +986,41 @@ class SQLAgentAdapter(AbstractAdapter):
                 )
         return response
 
+    async def query_async(self, command: commands.Command) -> commands.Command:
+        """
+        Answer a command asynchronously. Processes each request by the command type
+
+        Args:
+            command: commands.Command: The command to answer.
+
+        Returns:
+            commands.Command: The command to answer.
+        """
+        match command:
+            case commands.SQLQuestion():
+                response = self.question(command)
+            case commands.SQLCheck():
+                response = await self.check_async(command)
+            case commands.SQLGrounding():
+                response = await self.grounding_async(command)
+            case commands.SQLFilter():
+                response = await self.filter_async(command)
+            case commands.SQLJoinInference():
+                response = await self.join_inference_async(command)
+            case commands.SQLAggregation():
+                response = await self.aggregation_async(command)
+            case commands.SQLConstruction():
+                response = await self.construction_async(command)
+            case commands.SQLExecution():
+                response = await self.sql_execution_async(command)
+            case commands.SQLValidation():
+                response = await self.validation_async(command)
+            case _:
+                raise NotImplementedError(
+                    f"Not implemented in SQLAgentAdapter: {type(command)}"
+                )
+        return response
+
     @observe()
     def question(self, command: commands.Question) -> commands.Question:
         """
@@ -694,16 +1039,23 @@ class SQLAgentAdapter(AbstractAdapter):
             session_id=command.q_id,
         )
 
-        with self.database as db:
-            schema = db.get_schema()
+        try:
+            # Use context manager with improved error handling
+            with self.database as db:
+                schema = db.get_schema()
 
-        schema = self.convert_schema(schema)
+            schema = self.convert_schema(schema)
+            command.schema_info = schema
 
-        command.schema_info = schema
+            logger.info(
+                f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
+            )
 
-        logger.info(
-            f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
-        )
+        except Exception as e:
+            logger.error(f"Failed to get database schema in SQLAgentAdapter: {e}")
+            # Let the exception propagate - it will be caught by the message bus
+            # and converted to a FailedRequest event for WebSocket clients
+            raise
 
         return command
 
@@ -719,10 +1071,18 @@ class SQLAgentAdapter(AbstractAdapter):
             session_id=command.q_id,
         )
 
-        with self.database as db:
-            data = db.execute_query(command.sql_query)
+        try:
+            # Use context manager with improved error handling
+            with self.database as db:
+                data = db.execute_query(command.sql_query)
 
-        command.data = data
+            command.data = data
+
+        except Exception as e:
+            logger.error(f"Failed to execute SQL query: {e}")
+            # Let the exception propagate - it will be caught by the message bus
+            # and converted to a FailedRequest event for WebSocket clients
+            raise
 
         return command
 
@@ -753,6 +1113,31 @@ class SQLAgentAdapter(AbstractAdapter):
         command.chain_of_thought = response.chain_of_thought
 
         return command
+
+    # Placeholder async methods that wrap sync methods for compatibility
+    async def check_async(self, command):
+        return await asyncio.to_thread(self.check, command)
+
+    async def grounding_async(self, command):
+        return await asyncio.to_thread(self.grounding, command)
+
+    async def filter_async(self, command):
+        return await asyncio.to_thread(self.filter, command)
+
+    async def join_inference_async(self, command):
+        return await asyncio.to_thread(self.join_inference, command)
+
+    async def aggregation_async(self, command):
+        return await asyncio.to_thread(self.aggregation, command)
+
+    async def construction_async(self, command):
+        return await asyncio.to_thread(self.construction, command)
+
+    async def sql_execution_async(self, command):
+        return await asyncio.to_thread(self.sql_execution, command)
+
+    async def validation_async(self, command):
+        return await asyncio.to_thread(self.validation, command)
 
 
 class ScenarioAdapter(AbstractAdapter):
@@ -840,45 +1225,73 @@ class ScenarioAdapter(AbstractAdapter):
 
         return command
 
-    def convert_schema(self, schema: MetaData) -> commands.DatabaseSchema:
+    def convert_schema(
+        self, schema: Union[MetaData, Dict[str, Any]]
+    ) -> commands.DatabaseSchema:
         """
         Convert the schema to a more readable format.
+        Handles both MetaData objects and dict schemas.
         """
 
         tables = []
-        for table_name, table in schema.tables.items():
-            # Create Column objects for each column
-            columns = []
-            for column in table.columns:
-                if column.name in ["created_at", "updated_at"]:
-                    continue
+        relationships = []
 
-                columns.append(
-                    commands.Column(
-                        name=column.name,
-                        type=str(column.type),
-                        description=column.description,
+        # Handle dict format (from sync implementation)
+        if isinstance(schema, dict):
+            for table_name, columns_list in schema.get("tables", {}).items():
+                # Create Column objects for each column
+                columns = []
+                for col_info in columns_list:
+                    if col_info["name"] in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=col_info["name"],
+                            type=col_info["type"],
+                            description=col_info.get("description", ""),
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(name=table_name, columns=columns, description="")
+                )
+
+        # Handle MetaData format (original)
+        else:
+            for table_name, table in schema.tables.items():
+                # Create Column objects for each column
+                columns = []
+                for column in table.columns:
+                    if column.name in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=column.name,
+                            type=str(column.type),
+                            description=column.description,
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(
+                        name=table_name, columns=columns, description=table.description
                     )
                 )
 
-            # Create Table object
-            tables.append(
-                commands.Table(
-                    name=table_name, columns=columns, description=table.description
-                )
-            )
-
-        # Build relationships list
-        relationships = []
-        for table_name, table in schema.tables.items():
-            for fk in table.foreign_keys:
-                relationship = commands.Relationship(
-                    table_name=table_name,
-                    column_name=fk.parent.name,
-                    foreign_table_name=fk.column.table.name,
-                    foreign_column_name=fk.column.name,
-                )
-                relationships.append(relationship)
+            # Build relationships list for MetaData format
+            for table_name, table in schema.tables.items():
+                for fk in table.foreign_keys:
+                    relationship = commands.Relationship(
+                        table_name=table_name,
+                        column_name=fk.parent.name,
+                        foreign_table_name=fk.column.table.name,
+                        foreign_column_name=fk.column.name,
+                    )
+                    relationships.append(relationship)
 
         new_schema = commands.DatabaseSchema(
             tables=tables,
@@ -908,7 +1321,32 @@ class ScenarioAdapter(AbstractAdapter):
                 response = self.validation(command)
             case _:
                 raise NotImplementedError(
-                    f"Not implemented in AgentAdapter: {type(command)}"
+                    f"Not implemented in ScenarioAdapter: {type(command)}"
+                )
+        return response
+
+    async def query_async(self, command: commands.Command) -> commands.Command:
+        """
+        Answer a command asynchronously. Processes each request by the command type
+
+        Args:
+            command: commands.Command: The command to answer.
+
+        Returns:
+            commands.Command: The command to answer.
+        """
+        match command:
+            case commands.Scenario():
+                response = self.question(command)
+            case commands.Check():
+                response = await self.check_async(command)
+            case commands.ScenarioLLMResponse():
+                response = await self.finalize_async(command)
+            case commands.ScenarioFinalCheck():
+                response = await self.validation_async(command)
+            case _:
+                raise NotImplementedError(
+                    f"Not implemented in ScenarioAdapter: {type(command)}"
                 )
         return response
 
@@ -930,16 +1368,23 @@ class ScenarioAdapter(AbstractAdapter):
             session_id=command.q_id,
         )
 
-        with self.database as db:
-            schema = db.get_schema()
+        try:
+            # Use context manager with improved error handling
+            with self.database as db:
+                schema = db.get_schema()
 
-        schema = self.convert_schema(schema)
+            schema = self.convert_schema(schema)
+            command.schema_info = schema
 
-        command.schema_info = schema
+            logger.info(
+                f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
+            )
 
-        logger.info(
-            f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
-        )
+        except Exception as e:
+            logger.error(f"Failed to get database schema in ScenarioAdapter: {e}")
+            # Let the exception propagate - it will be caught by the message bus
+            # and converted to a FailedRequest event for WebSocket clients
+            raise
 
         return command
 
@@ -974,3 +1419,13 @@ class ScenarioAdapter(AbstractAdapter):
         command.chain_of_thought = response.chain_of_thought
 
         return command
+
+    # Placeholder async methods that wrap sync methods for compatibility
+    async def check_async(self, command):
+        return await asyncio.to_thread(self.check, command)
+
+    async def finalize_async(self, command):
+        return await asyncio.to_thread(self.finalize, command)
+
+    async def validation_async(self, command):
+        return await asyncio.to_thread(self.validation, command)

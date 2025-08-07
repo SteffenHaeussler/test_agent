@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import os
 from uuid import uuid4
 
@@ -27,9 +28,9 @@ bus = bootstrap(
 )
 
 
-def answer(question: str, q_id: str, tool: str = "tool") -> str:
+async def answer_async(question: str, q_id: str, tool: str = "tool") -> str:
     """
-    Entrypoint for the agent. Responds are handled by the notifications.
+    Async entrypoint for the agent. Responds are handled by the notifications.
 
     Args:
         question: str: The question to answer.
@@ -50,10 +51,28 @@ def answer(question: str, q_id: str, tool: str = "tool") -> str:
             command = Scenario(question=question, q_id=q_id)
         else:
             command = Question(question=question, q_id=q_id)
-        bus.handle(command)
+        await bus.handle(command)
     except (handlers.InvalidQuestion, ValueError) as e:
         raise Exception(str(e))
     return "done"
+
+
+def answer(question: str, q_id: str, tool: str = "tool") -> str:
+    """
+    Sync wrapper for the async agent entry point.
+
+    Args:
+        question: str: The question to answer.
+        q_id: str: The id of the question.
+        tool: str: The tool to use ('tool' for regular agent, 'sql' for SQL agent).
+
+    Returns:
+        str: done.
+
+    Raises:
+        Exception: If the question is invalid.
+    """
+    return asyncio.run(answer_async(question, q_id, tool))
 
 
 if __name__ == "__main__":

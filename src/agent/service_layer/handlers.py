@@ -15,7 +15,7 @@ class InvalidQuestion(Exception):
 
 
 @observe()
-def answer(
+async def answer(
     command: commands.Question,
     adapter: AbstractAdapter,
     notifications: AbstractNotifications = None,
@@ -56,7 +56,7 @@ def answer(
                 notification.send(agent.q_id, status_event)
 
         logger.info(f"Calling Adapter with command: {type(command)}")
-        updated_command = adapter.answer(command)
+        updated_command = await adapter.answer_async(command)
         command = agent.update(updated_command)
 
         if agent.send_response:
@@ -82,7 +82,7 @@ def answer(
 
 
 @observe()
-def query(
+async def query(
     command: commands.SQLQuestion,
     adapter: AbstractAdapter,
     notifications: AbstractNotifications = None,
@@ -122,7 +122,7 @@ def query(
                 notification.send(agent.q_id, status_event)
 
         logger.info(f"Calling Adapter with command: {type(command)}")
-        updated_command = adapter.query(command)
+        updated_command = await adapter.query_async(command)
         command = agent.update(updated_command)
 
         if agent.send_response:
@@ -148,7 +148,7 @@ def query(
 
 
 @observe()
-def scenario(
+async def scenario(
     command: commands.Scenario,
     adapter: AbstractAdapter,
     notifications: AbstractNotifications = None,
@@ -177,7 +177,7 @@ def scenario(
                 notification.send(agent.q_id, status_event)
 
         logger.info(f"Calling Adapter with command: {type(command)}")
-        updated_command = adapter.scenario(command)
+        updated_command = await adapter.scenario_async(command)
         command = agent.update(updated_command)
 
         if agent.send_response:
@@ -203,7 +203,7 @@ def scenario(
 
 
 @observe()
-def send_response(
+async def send_response(
     event: Union[events.Response, events.Evaluation],
     notifications: AbstractNotifications,
 ) -> None:
@@ -230,7 +230,7 @@ def send_response(
 
 
 @observe()
-def send_failure(
+async def send_failure(
     event: Union[events.RejectedAnswer, events.RejectedRequest, events.FailedRequest],
     notifications: AbstractNotifications,
 ) -> None:
@@ -258,7 +258,7 @@ def send_failure(
 
 
 @observe()
-def send_status_update(
+async def send_status_update(
     event: events.StatusUpdate,
     notifications: AbstractNotifications,
 ) -> None:

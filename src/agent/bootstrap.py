@@ -172,4 +172,9 @@ def inject_dependencies(handler, dependencies):
     deps = {
         name: dependency for name, dependency in dependencies.items() if name in params
     }
-    return lambda message: handler(message, **deps)
+
+    # Check if the handler is async
+    if inspect.iscoroutinefunction(handler):
+        return lambda message: handler(message, **deps)
+    else:
+        return lambda message: handler(message, **deps)

@@ -99,6 +99,14 @@ class EnvVars:
     PG_EVAL_DB = "PG_EVAL_DB"
     DATABASE_TYPE = "database_type"
 
+    # Cache configuration
+    REDIS_HOST = "REDIS_HOST"
+    REDIS_PORT = "REDIS_PORT"
+    REDIS_DB = "REDIS_DB"
+    REDIS_PASSWORD = "REDIS_PASSWORD"
+    REDIS_MAX_CONNECTIONS = "REDIS_MAX_CONNECTIONS"
+    CACHE_ENABLED = "CACHE_ENABLED"
+
 
 # =============================================================================
 # STATUS MESSAGES
@@ -168,6 +176,7 @@ class ErrorMessages:
     POSTGRESQL_CONNECTION_PARAMETERS_NOT_SET = (
         "PostgreSQL connection parameters not set in environment variables"
     )
+    REDIS_HOST_NOT_SET = "redis_host not set in environment variables"
 
     # File and path errors
     PROMPT_PATH_NOT_FOUND = "Prompt path not found: {path}"
@@ -190,6 +199,24 @@ class Database:
     # Default values
     DEFAULT_DATABASE_TYPE = "postgres"
     DEFAULT_TELEMETRY_ENABLED = "false"
+
+
+# =============================================================================
+# CACHE CONSTANTS
+# =============================================================================
+class Cache:
+    """Cache-related constants."""
+
+    # Default Redis configuration
+    DEFAULT_REDIS_HOST = "localhost"
+    DEFAULT_REDIS_PORT = 6379
+    DEFAULT_REDIS_DB = 0
+    DEFAULT_MAX_CONNECTIONS = 10
+    DEFAULT_CACHE_ENABLED = "true"
+
+    # Redis URL template
+    REDIS_URL_TEMPLATE = "redis://{password_part}{host}:{port}/{db}"
+    REDIS_URL_WITH_PASSWORD_TEMPLATE = "redis://:{password}@{host}:{port}/{db}"
 
 
 # =============================================================================

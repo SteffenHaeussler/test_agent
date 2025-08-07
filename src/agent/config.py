@@ -1,7 +1,7 @@
 from os import getenv
 from pathlib import Path
 
-from src.agent.utils.constants import EnvVars, ErrorMessages, Database, URLs
+from src.agent.utils.constants import EnvVars, ErrorMessages, Database, URLs, Cache
 
 ROOTDIR: str = str(Path(__file__).resolve().parents[2])
 
@@ -220,4 +220,37 @@ def get_evaluation_database_config():
         connection_string=evaluation_connection_string,
         db_type=Database.TYPE_POSTGRES,
         db_name=db_name,
+    )
+
+
+def get_cache_config():
+    """Get configuration for Redis cache."""
+    redis_host = getenv(EnvVars.REDIS_HOST, Cache.DEFAULT_REDIS_HOST)
+    redis_port = int(getenv(EnvVars.REDIS_PORT, Cache.DEFAULT_REDIS_PORT))
+    redis_db = int(getenv(EnvVars.REDIS_DB, Cache.DEFAULT_REDIS_DB))
+    redis_password = getenv(EnvVars.REDIS_PASSWORD)  # Optional
+    redis_max_connections = int(
+        getenv(EnvVars.REDIS_MAX_CONNECTIONS, Cache.DEFAULT_MAX_CONNECTIONS)
+    )
+    cache_enabled = (
+        getenv(EnvVars.CACHE_ENABLED, Cache.DEFAULT_CACHE_ENABLED).lower() == "true"
+    )
+
+    # Build Redis URL
+    if redis_password:
+        redis_url = Cache.REDIS_URL_WITH_PASSWORD_TEMPLATE.format(
+            password=redis_password, host=redis_host, port=redis_port, db=redis_db
+        )
+    else:
+        redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
+
+    return dict(
+        host=redis_host,
+        port=redis_port,
+        db=redis_db,
+        password=redis_password,
+        max_connections=redis_max_connections,
+        decode_responses=True,
+        redis_url=redis_url,
+        enabled=cache_enabled,
     )
