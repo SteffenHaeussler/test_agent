@@ -52,6 +52,17 @@ try:
         async def shutdown_event():
             if cache_manager:
                 await cache_manager.close()
+
+            # Close database connections for all adapters
+            if hasattr(bus.adapter, "sql_adapter"):
+                if hasattr(bus.adapter.sql_adapter, "database"):
+                    await bus.adapter.sql_adapter.database.disconnect()
+            if hasattr(bus.adapter, "scenario_adapter"):
+                if hasattr(bus.adapter.scenario_adapter, "database"):
+                    await bus.adapter.scenario_adapter.database.disconnect()
+            if hasattr(bus.adapter, "agent_adapter"):
+                if hasattr(bus.adapter.agent_adapter, "database"):
+                    await bus.adapter.agent_adapter.database.disconnect()
 except Exception as e:
     logger.warning(f"Failed to initialize cache manager: {e}")
 

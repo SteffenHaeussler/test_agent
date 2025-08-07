@@ -108,19 +108,21 @@ class TestAsyncExceptionBehavior:
         self, database_adapter
     ):
         """Test that get_schema_async raises DatabaseQueryException with proper context."""
-        mock_engine = AsyncMock()
-        mock_session = AsyncMock()
-
-        database_adapter.engine = mock_engine
-        database_adapter.session_maker = Mock(return_value=mock_session)
-
-        # Setup the async context manager
-        mock_session.__aenter__.return_value = mock_session
-        mock_session.__aexit__.return_value = None
+        # Create a mock connection that supports async context manager
+        mock_conn = AsyncMock()
+        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
 
         # Mock the run_sync method to raise an error
         original_error = OperationalError("Permission denied", None, None)
-        mock_session.run_sync.side_effect = original_error
+        mock_conn.run_sync = AsyncMock(side_effect=original_error)
+
+        # Mock engine.connect() to return the mock connection context manager
+        mock_engine = AsyncMock()
+        mock_engine.connect = Mock(return_value=mock_conn)
+
+        database_adapter.engine = mock_engine
+        database_adapter.session_maker = Mock()
 
         with pytest.raises(DatabaseQueryException) as exc_info:
             await database_adapter.get_schema_async()

@@ -341,13 +341,18 @@ class TestAsyncDatabaseAdapter:
     @pytest.mark.asyncio
     async def test_get_schema_success(self, database_instance, mock_session):
         """Test successful schema retrieval."""
-        mock_session.run_sync = AsyncMock()
+        # Create a mock connection that supports async context manager
+        mock_conn = AsyncMock()
+        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_conn.__aexit__ = AsyncMock(return_value=None)
+        mock_conn.run_sync = AsyncMock()
 
-        def mock_session_maker():
-            return mock_session
+        # Mock engine.connect() to return the mock connection context manager
+        mock_engine = AsyncMock()
+        mock_engine.connect = MagicMock(return_value=mock_conn)
 
-        database_instance.engine = AsyncMock()
-        database_instance.session_maker = mock_session_maker
+        database_instance.engine = mock_engine
+        database_instance.session_maker = MagicMock()
 
         with patch("src.agent.adapters.database.MetaData") as mock_metadata:
             mock_metadata_instance = MagicMock()
@@ -356,7 +361,7 @@ class TestAsyncDatabaseAdapter:
             result = await database_instance.get_schema_async()
 
             assert result == mock_metadata_instance
-            mock_session.run_sync.assert_called_once()
+            mock_conn.run_sync.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_schema_no_engine(self, database_instance):
@@ -381,7 +386,8 @@ class TestAsyncDatabaseAdapter:
                 assert db == database_instance
                 mock_connect.assert_called_once()
 
-            mock_disconnect.assert_called_once()
+            # We no longer disconnect in context manager to maintain connection pooling
+            mock_disconnect.assert_not_called()
 
     def test_legacy_get_connection_raises(self, database_instance):
         """Test that legacy _get_connection method raises NotImplementedError."""

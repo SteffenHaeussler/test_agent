@@ -32,7 +32,7 @@ class AbstractDatabase(ABC):
         pass
 
     def __enter__(self):
-        """Enter the synchronous context manager, connect to the database."""
+        """Enter the synchronous context manager, connect to the database if not already connected."""
         # For backward compatibility, provide a synchronous interface
         import asyncio
 
@@ -75,54 +75,21 @@ class AbstractDatabase(ABC):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit the synchronous context manager, disconnect from the database."""
-        # For backward compatibility, provide synchronous disconnect
-        import asyncio
-
-        if asyncio.iscoroutinefunction(self.disconnect):
-            # If disconnect is async, run it in the event loop
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If there's already a running loop, we need to use a thread
-                    import concurrent.futures
-
-                    def run_in_thread():
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        try:
-                            new_loop.run_until_complete(self.disconnect())
-                        finally:
-                            new_loop.close()
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        executor.submit(run_in_thread).result()
-                else:
-                    loop.run_until_complete(self.disconnect())
-            except RuntimeError as e:
-                # Check if it's "no current event loop" error
-                if "There is no current event loop" in str(e):
-                    # Create new event loop if none exists
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        loop.run_until_complete(self.disconnect())
-                    finally:
-                        loop.close()
-                else:
-                    raise
-        else:
-            # If disconnect is not async, call it directly
-            self.disconnect()
+        """Exit the synchronous context manager. Do NOT disconnect to maintain connection pool."""
+        # Don't disconnect here - maintain persistent connection pool
+        # The connection will be reused for subsequent operations
+        pass
 
     async def __aenter__(self):
-        """Enter the async context manager, connect to the database."""
+        """Enter the async context manager, connect to the database if not already connected."""
         await self.connect()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit the async context manager, disconnect from the database."""
-        await self.disconnect()
+        """Exit the async context manager. Do NOT disconnect to maintain connection pool."""
+        # Don't disconnect here - maintain persistent connection pool
+        # The connection will be reused for subsequent operations
+        pass
 
     async def execute_query(
         self,
@@ -276,32 +243,49 @@ class BaseDatabaseAdapter(AbstractDatabase):
             Result of the coroutine execution
         """
         import asyncio
-        import concurrent.futures
+        import threading
 
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # If there's already a running loop, we need to use a thread
+                # Store the result in a thread-safe way
+                result = [None]
+                exception = [None]
+
                 def run_in_thread():
+                    # Create a new event loop for this thread
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
                     try:
-                        return new_loop.run_until_complete(coro)
+                        result[0] = new_loop.run_until_complete(coro)
+                    except Exception as e:
+                        exception[0] = e
                     finally:
-                        new_loop.close()
+                        # Don't close the loop immediately to allow connection reuse
+                        pass
 
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    return executor.submit(run_in_thread).result()
+                thread = threading.Thread(target=run_in_thread)
+                thread.start()
+                thread.join()
+
+                if exception[0]:
+                    raise exception[0]
+                return result[0]
             else:
                 return loop.run_until_complete(coro)
-        except RuntimeError:
-            # Create new event loop if none exists
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(coro)
-            finally:
-                loop.close()
+        except RuntimeError as e:
+            if "There is no current event loop" in str(e):
+                # Create new event loop if none exists
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(coro)
+                finally:
+                    # Don't close the loop to allow connection reuse
+                    pass
+            else:
+                raise
 
     # Synchronous wrapper methods for backward compatibility
     def execute_query_sync(
@@ -421,12 +405,37 @@ class BaseDatabaseAdapter(AbstractDatabase):
     async def disconnect(self) -> None:
         """
         Disconnect from the database and dispose of the engine.
+        This should only be called when shutting down the application,
+        not after each query operation.
         """
         if self.engine:
             await self.engine.dispose()
             self.engine = None
             self.session_maker = None
             logger.info("Disconnected from database")
+
+    def close(self) -> None:
+        """
+        Explicitly close the database connection.
+        This is a synchronous wrapper for disconnect() to be called on shutdown.
+        """
+        import asyncio
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Schedule the disconnect as a task
+                loop.create_task(self.disconnect())
+            else:
+                loop.run_until_complete(self.disconnect())
+        except RuntimeError:
+            # Create new event loop if none exists
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.disconnect())
+            finally:
+                loop.close()
 
     async def execute_query_async(
         self,
@@ -680,11 +689,11 @@ class BaseDatabaseAdapter(AbstractDatabase):
 
         try:
             metadata = MetaData()
-            async with self.session_maker() as session:
-                # Run metadata reflection in an async context
-                await session.run_sync(
-                    lambda sync_conn: metadata.reflect(bind=sync_conn)
-                )
+            # Use the engine directly for reflection
+            # Create a connection from the engine for reflection
+            async with self.engine.connect() as conn:
+                # Run metadata reflection in a sync context within the async connection
+                await conn.run_sync(metadata.reflect)
             return metadata
         except Exception as e:
             logger.error(f"Error reflecting metadata: {e}")
