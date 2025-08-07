@@ -28,36 +28,41 @@ class TestDatabase:
         assert database_instance.db_type == "postgres"
 
     def test_execute_query(self, database_instance):
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import MagicMock
 
-        # Mock the async engine creation and connection
+        # Mock the sync engine to avoid actual connection
         mock_engine = MagicMock()
-        database_instance.engine = mock_engine
+        mock_session_maker = MagicMock()
 
-        # Mock execute_query_sync to return empty DataFrame
+        # Mock _get_sync_engine to return mocked engine
         with patch.object(
             database_instance,
-            "execute_query_sync",
-            return_value={"data": pd.DataFrame()},
+            "_get_sync_engine",
+            return_value=(mock_engine, mock_session_maker),
         ):
-            # Mock connect and disconnect for context manager
-            with patch.object(database_instance, "connect", new_callable=AsyncMock):
+            # Mock _connect_sync_impl to avoid actual connection
+            with patch.object(database_instance, "_connect_sync_impl"):
+                # Mock execute_query_sync to return empty DataFrame
                 with patch.object(
-                    database_instance, "disconnect", new_callable=AsyncMock
+                    database_instance,
+                    "execute_query_sync",
+                    return_value={"data": pd.DataFrame()},
                 ):
                     with database_instance as db:
                         result = db.execute_query("SELECT * FROM your_table")
 
         pd.testing.assert_frame_equal(result["data"], pd.DataFrame())
 
-    @patch(
-        "src.agent.adapters.database.create_async_engine",
-        side_effect=Exception("Database connection failed"),
-    )
-    def test_connection_error(self, mock_create_engine, database_instance):
-        with pytest.raises(DatabaseConnectionException):
-            with database_instance as db:
-                db.execute_query("SELECT * FROM your_table")
+    def test_connection_error(self, database_instance):
+        # Mock _connect_sync_impl to raise an exception
+        with patch.object(
+            database_instance,
+            "_connect_sync_impl",
+            side_effect=DatabaseConnectionException("Database connection failed"),
+        ):
+            with pytest.raises(DatabaseConnectionException):
+                with database_instance as db:
+                    db.execute_query("SELECT * FROM your_table")
 
     def test_execute_query_no_engine(self, database_instance):
         with pytest.raises(DatabaseConnectionException):

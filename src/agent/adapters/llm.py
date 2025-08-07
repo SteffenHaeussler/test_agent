@@ -177,7 +177,16 @@ class LLM(AbstractLLM):
                     try:
                         return new_loop.run_until_complete(_run_llm_call())
                     finally:
+                        # Clean up any pending tasks before closing the loop
+                        pending = asyncio.all_tasks(new_loop)
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            new_loop.run_until_complete(
+                                asyncio.gather(*pending, return_exceptions=True)
+                            )
                         new_loop.close()
+                        asyncio.set_event_loop(None)
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     return executor.submit(run_in_thread).result()
@@ -190,7 +199,16 @@ class LLM(AbstractLLM):
             try:
                 return loop.run_until_complete(_run_llm_call())
             finally:
+                # Clean up any pending tasks before closing the loop
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 loop.close()
+                asyncio.set_event_loop(None)
 
     @observe(as_type="generation")
     async def use_async(self, question: str, response_model: BaseModel) -> BaseModel:

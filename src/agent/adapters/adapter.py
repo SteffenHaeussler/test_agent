@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC
+from typing import Any, Dict, Union
 
 from langfuse import get_client, observe
 from loguru import logger
@@ -370,6 +371,11 @@ class AgentAdapter(AbstractAdapter):
         """
         candidates = []
 
+        # Log once at the beginning instead of for each call
+        num_candidates = len(command.candidates)
+        if num_candidates > 0:
+            logger.debug(f"Reranking {num_candidates} candidates")
+
         for candidate in command.candidates:
             response = self.rag.rerank(command.question, candidate.description)
 
@@ -380,6 +386,12 @@ class AgentAdapter(AbstractAdapter):
         candidates = sorted(candidates, key=lambda x: -x.score)
 
         command.candidates = candidates[: self.rag.n_ranking_candidates]
+
+        if num_candidates > 0:
+            logger.debug(
+                f"Reranking complete - kept top {len(command.candidates)} candidates"
+            )
+
         return command
 
     @observe()
@@ -571,6 +583,11 @@ class AgentAdapter(AbstractAdapter):
         """
         candidates = []
 
+        # Log once at the beginning instead of for each call
+        num_candidates = len(command.candidates)
+        if num_candidates > 0:
+            logger.debug(f"Reranking {num_candidates} candidates concurrently")
+
         # Process reranking concurrently for better performance
         rerank_tasks = []
         for candidate in command.candidates:
@@ -588,6 +605,12 @@ class AgentAdapter(AbstractAdapter):
         candidates = sorted(candidates, key=lambda x: -x.score)
 
         command.candidates = candidates[: self.rag.n_ranking_candidates]
+
+        if num_candidates > 0:
+            logger.debug(
+                f"Reranking complete - kept top {len(command.candidates)} candidates"
+            )
+
         return command
 
     @observe()
@@ -778,45 +801,73 @@ class SQLAgentAdapter(AbstractAdapter):
 
         return command
 
-    def convert_schema(self, schema: MetaData) -> commands.DatabaseSchema:
+    def convert_schema(
+        self, schema: Union[MetaData, Dict[str, Any]]
+    ) -> commands.DatabaseSchema:
         """
         Convert the schema to a more readable format.
+        Handles both MetaData objects and dict schemas.
         """
 
         tables = []
-        for table_name, table in schema.tables.items():
-            # Create Column objects for each column
-            columns = []
-            for column in table.columns:
-                if column.name in ["created_at", "updated_at"]:
-                    continue
+        relationships = []
 
-                columns.append(
-                    commands.Column(
-                        name=column.name,
-                        type=str(column.type),
-                        description=column.description,
+        # Handle dict format (from sync implementation)
+        if isinstance(schema, dict):
+            for table_name, columns_list in schema.get("tables", {}).items():
+                # Create Column objects for each column
+                columns = []
+                for col_info in columns_list:
+                    if col_info["name"] in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=col_info["name"],
+                            type=col_info["type"],
+                            description=col_info.get("description", ""),
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(name=table_name, columns=columns, description="")
+                )
+
+        # Handle MetaData format (original)
+        else:
+            for table_name, table in schema.tables.items():
+                # Create Column objects for each column
+                columns = []
+                for column in table.columns:
+                    if column.name in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=column.name,
+                            type=str(column.type),
+                            description=column.description,
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(
+                        name=table_name, columns=columns, description=table.description
                     )
                 )
 
-            # Create Table object
-            tables.append(
-                commands.Table(
-                    name=table_name, columns=columns, description=table.description
-                )
-            )
-
-        # Build relationships list
-        relationships = []
-        for table_name, table in schema.tables.items():
-            for fk in table.foreign_keys:
-                relationship = commands.Relationship(
-                    table_name=table_name,
-                    column_name=fk.parent.name,
-                    foreign_table_name=fk.column.table.name,
-                    foreign_column_name=fk.column.name,
-                )
-                relationships.append(relationship)
+            # Build relationships list for MetaData format
+            for table_name, table in schema.tables.items():
+                for fk in table.foreign_keys:
+                    relationship = commands.Relationship(
+                        table_name=table_name,
+                        column_name=fk.parent.name,
+                        foreign_table_name=fk.column.table.name,
+                        foreign_column_name=fk.column.name,
+                    )
+                    relationships.append(relationship)
 
         new_schema = commands.DatabaseSchema(
             tables=tables,
@@ -988,16 +1039,23 @@ class SQLAgentAdapter(AbstractAdapter):
             session_id=command.q_id,
         )
 
-        with self.database as db:
-            schema = db.get_schema()
+        try:
+            # Use context manager with improved error handling
+            with self.database as db:
+                schema = db.get_schema()
 
-        schema = self.convert_schema(schema)
+            schema = self.convert_schema(schema)
+            command.schema_info = schema
 
-        command.schema_info = schema
+            logger.info(
+                f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
+            )
 
-        logger.info(
-            f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
-        )
+        except Exception as e:
+            logger.error(f"Failed to get database schema in SQLAgentAdapter: {e}")
+            # Let the exception propagate - it will be caught by the message bus
+            # and converted to a FailedRequest event for WebSocket clients
+            raise
 
         return command
 
@@ -1013,10 +1071,18 @@ class SQLAgentAdapter(AbstractAdapter):
             session_id=command.q_id,
         )
 
-        with self.database as db:
-            data = db.execute_query(command.sql_query)
+        try:
+            # Use context manager with improved error handling
+            with self.database as db:
+                data = db.execute_query(command.sql_query)
 
-        command.data = data
+            command.data = data
+
+        except Exception as e:
+            logger.error(f"Failed to execute SQL query: {e}")
+            # Let the exception propagate - it will be caught by the message bus
+            # and converted to a FailedRequest event for WebSocket clients
+            raise
 
         return command
 
@@ -1159,45 +1225,73 @@ class ScenarioAdapter(AbstractAdapter):
 
         return command
 
-    def convert_schema(self, schema: MetaData) -> commands.DatabaseSchema:
+    def convert_schema(
+        self, schema: Union[MetaData, Dict[str, Any]]
+    ) -> commands.DatabaseSchema:
         """
         Convert the schema to a more readable format.
+        Handles both MetaData objects and dict schemas.
         """
 
         tables = []
-        for table_name, table in schema.tables.items():
-            # Create Column objects for each column
-            columns = []
-            for column in table.columns:
-                if column.name in ["created_at", "updated_at"]:
-                    continue
+        relationships = []
 
-                columns.append(
-                    commands.Column(
-                        name=column.name,
-                        type=str(column.type),
-                        description=column.description,
+        # Handle dict format (from sync implementation)
+        if isinstance(schema, dict):
+            for table_name, columns_list in schema.get("tables", {}).items():
+                # Create Column objects for each column
+                columns = []
+                for col_info in columns_list:
+                    if col_info["name"] in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=col_info["name"],
+                            type=col_info["type"],
+                            description=col_info.get("description", ""),
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(name=table_name, columns=columns, description="")
+                )
+
+        # Handle MetaData format (original)
+        else:
+            for table_name, table in schema.tables.items():
+                # Create Column objects for each column
+                columns = []
+                for column in table.columns:
+                    if column.name in ["created_at", "updated_at"]:
+                        continue
+
+                    columns.append(
+                        commands.Column(
+                            name=column.name,
+                            type=str(column.type),
+                            description=column.description,
+                        )
+                    )
+
+                # Create Table object
+                tables.append(
+                    commands.Table(
+                        name=table_name, columns=columns, description=table.description
                     )
                 )
 
-            # Create Table object
-            tables.append(
-                commands.Table(
-                    name=table_name, columns=columns, description=table.description
-                )
-            )
-
-        # Build relationships list
-        relationships = []
-        for table_name, table in schema.tables.items():
-            for fk in table.foreign_keys:
-                relationship = commands.Relationship(
-                    table_name=table_name,
-                    column_name=fk.parent.name,
-                    foreign_table_name=fk.column.table.name,
-                    foreign_column_name=fk.column.name,
-                )
-                relationships.append(relationship)
+            # Build relationships list for MetaData format
+            for table_name, table in schema.tables.items():
+                for fk in table.foreign_keys:
+                    relationship = commands.Relationship(
+                        table_name=table_name,
+                        column_name=fk.parent.name,
+                        foreign_table_name=fk.column.table.name,
+                        foreign_column_name=fk.column.name,
+                    )
+                    relationships.append(relationship)
 
         new_schema = commands.DatabaseSchema(
             tables=tables,
@@ -1274,16 +1368,23 @@ class ScenarioAdapter(AbstractAdapter):
             session_id=command.q_id,
         )
 
-        with self.database as db:
-            schema = db.get_schema()
+        try:
+            # Use context manager with improved error handling
+            with self.database as db:
+                schema = db.get_schema()
 
-        schema = self.convert_schema(schema)
+            schema = self.convert_schema(schema)
+            command.schema_info = schema
 
-        command.schema_info = schema
+            logger.info(
+                f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
+            )
 
-        logger.info(
-            f"Schema created with {len(schema.tables)} tables and {len(schema.relationships)} relationships"
-        )
+        except Exception as e:
+            logger.error(f"Failed to get database schema in ScenarioAdapter: {e}")
+            # Let the exception propagate - it will be caught by the message bus
+            # and converted to a FailedRequest event for WebSocket clients
+            raise
 
         return command
 

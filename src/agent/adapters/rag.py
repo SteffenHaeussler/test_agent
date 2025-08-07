@@ -232,9 +232,16 @@ class BaseRAG(AbstractModel):
                     raise ValueError("Invalid method")
 
                 response.raise_for_status()
-                logger.debug(
-                    f"RAG API call to {api_url} successful after {retry_count} retries"
-                )
+
+                # Only log successful calls if there were retries, or if it's not a ranking call
+                # Ranking calls are made in bulk and create too much log noise
+                if retry_count > 0:
+                    logger.debug(
+                        f"RAG API call to {api_url} successful after {retry_count} retries"
+                    )
+                elif "ranking" not in api_url:
+                    logger.debug(f"RAG API call to {api_url} successful")
+
                 return response
 
             except httpx.TimeoutException as e:
@@ -400,7 +407,16 @@ class BaseRAG(AbstractModel):
                     try:
                         return new_loop.run_until_complete(coro)
                     finally:
+                        # Clean up any pending tasks before closing the loop
+                        pending = asyncio.all_tasks(new_loop)
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            new_loop.run_until_complete(
+                                asyncio.gather(*pending, return_exceptions=True)
+                            )
                         new_loop.close()
+                        asyncio.set_event_loop(None)
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     return executor.submit(run_in_thread).result()
@@ -413,7 +429,16 @@ class BaseRAG(AbstractModel):
             try:
                 return loop.run_until_complete(coro)
             finally:
+                # Clean up any pending tasks before closing the loop
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 loop.close()
+                asyncio.set_event_loop(None)
 
     async def embed_async(self, text: str) -> Optional[Dict[str, List[float]]]:
         """
