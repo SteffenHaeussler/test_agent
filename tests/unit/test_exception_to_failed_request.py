@@ -5,7 +5,8 @@ This test demonstrates the NEW behavior where exceptions automatically
 create FailedRequest events to notify users via WebSocket.
 """
 
-from unittest.mock import Mock
+import pytest
+from unittest.mock import Mock, AsyncMock
 
 from src.agent.adapters import adapter as AbstractAdapter
 from src.agent.domain import commands, events
@@ -16,7 +17,8 @@ from src.agent.service_layer import messagebus
 class TestExceptionHandling:
     """Test automatic exception to FailedRequest conversion."""
 
-    def test_new_behavior_exception_creates_failed_request(self):
+    @pytest.mark.asyncio
+    async def test_new_behavior_exception_creates_failed_request(self):
         """
         Test that exceptions now automatically create FailedRequest events
         instead of being re-raised.
@@ -27,8 +29,8 @@ class TestExceptionHandling:
 
         notifications = Mock()
 
-        # Create a handler that raises DatabaseConnectionException
-        def failing_handler(command):
+        # Create an async handler that raises DatabaseConnectionException
+        async def failing_handler(command):
             raise DatabaseConnectionException(
                 "Failed to connect to database",
                 context={"host": "localhost", "port": 5432},
@@ -36,7 +38,7 @@ class TestExceptionHandling:
 
         command_handlers = {commands.Question: failing_handler}
 
-        failed_request_handler = Mock()
+        failed_request_handler = AsyncMock()
         event_handlers = {
             events.FailedRequest: [failed_request_handler]  # This WILL be called now
         }
@@ -53,7 +55,7 @@ class TestExceptionHandling:
         )
 
         # Act
-        bus.handle(question)  # No longer raises exception
+        await bus.handle(question)  # No longer raises exception
 
         # Assert
         # Verify that FailedRequest event WAS created (new behavior)

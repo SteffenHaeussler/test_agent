@@ -1,3 +1,4 @@
+import asyncio
 from typing import Callable, Dict, List, Type, Union
 
 from loguru import logger
@@ -36,7 +37,7 @@ class MessageBus:
         self.command_handlers = command_handlers
         self.notifications = notifications
 
-    def handle(
+    async def handle(
         self,
         message: Message,
     ) -> None:
@@ -53,13 +54,13 @@ class MessageBus:
         while self.queue:
             message = self.queue.pop(0)
             if isinstance(message, events.Event):
-                self.handle_event(message)
+                await self.handle_event(message)
             elif isinstance(message, commands.Command):
-                self.handle_command(message)
+                await self.handle_command(message)
             else:
                 raise Exception(f"{message} was not an Event or Command")
 
-    def handle_command(
+    async def handle_command(
         self,
         command: commands.Command,
     ) -> None:
@@ -75,7 +76,7 @@ class MessageBus:
         logger.debug("handling command %s", command)
         try:
             handler = self.command_handlers[type(command)]
-            handler(command)
+            await handler(command)
             self.queue.extend(self.adapter.collect_new_events())
         except Exception as e:
             logger.exception("Exception handling command %s", command)
@@ -105,7 +106,7 @@ class MessageBus:
             # Don't re-raise - let the FailedRequest event notify the user
             # This ensures the message bus continues processing
 
-    def handle_event(
+    async def handle_event(
         self,
         event: events.Event,
     ) -> None:
@@ -118,11 +119,29 @@ class MessageBus:
         Returns:
             None
         """
+        # Process event handlers concurrently for better performance
+        handler_tasks = []
         for handler in self.event_handlers[type(event)]:
-            try:
-                logger.debug(f"handling event {str(event)} with handler {str(handler)}")
-                handler(event)
-                self.queue.extend(self.adapter.collect_new_events())
-            except Exception:
-                logger.exception(f"Exception handling event {event}")
-                continue
+            handler_tasks.append(self._handle_single_event(handler, event))
+
+        if handler_tasks:
+            await asyncio.gather(*handler_tasks, return_exceptions=True)
+            self.queue.extend(self.adapter.collect_new_events())
+
+    async def _handle_single_event(
+        self,
+        handler: Callable,
+        event: events.Event,
+    ) -> None:
+        """
+        Handle a single event with a specific handler.
+
+        Args:
+            handler: Callable: The event handler function.
+            event: events.Event: The event to handle.
+        """
+        try:
+            logger.debug(f"handling event {str(event)} with handler {str(handler)}")
+            await handler(event)
+        except Exception:
+            logger.exception(f"Exception handling event {event}")

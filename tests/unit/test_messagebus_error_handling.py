@@ -5,7 +5,8 @@ This tests that exceptions are automatically converted to FailedRequest events
 so users are notified via WebSocket when errors occur.
 """
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
+import pytest
 
 from src.agent.service_layer.messagebus import MessageBus
 from src.agent.domain import commands, events
@@ -27,8 +28,8 @@ class TestMessageBusErrorHandling:
         # Mock handlers
         self.command_handlers = {}
         self.event_handlers = {
-            events.FailedRequest: [Mock()],
-            events.Response: [Mock()],  # Add Response handler for test
+            events.FailedRequest: [AsyncMock()],
+            events.Response: [AsyncMock()],  # Add Response handler for test
         }
 
         self.bus = MessageBus(
@@ -38,14 +39,15 @@ class TestMessageBusErrorHandling:
             notifications=self.notifications,
         )
 
-    def test_database_exception_creates_failed_request_event(self):
+    @pytest.mark.asyncio
+    async def test_database_exception_creates_failed_request_event(self):
         """Test that DatabaseException creates a FailedRequest event."""
         # Arrange
         command = commands.Question(
             question="What is the total revenue?", q_id="test123"
         )
 
-        def failing_handler(cmd):
+        async def failing_handler(cmd):
             raise DatabaseConnectionException(
                 "Failed to connect to database",
                 context={"host": "localhost", "port": 5432},
@@ -54,7 +56,7 @@ class TestMessageBusErrorHandling:
         self.command_handlers[commands.Question] = failing_handler
 
         # Act
-        self.bus.handle(command)
+        await self.bus.handle(command)
 
         # Assert
         # Check that FailedRequest event handler was called
@@ -68,18 +70,19 @@ class TestMessageBusErrorHandling:
         assert failed_event.q_id == "test123"
         assert "Failed to connect to database" in failed_event.exception
 
-    def test_generic_exception_creates_failed_request_event(self):
+    @pytest.mark.asyncio
+    async def test_generic_exception_creates_failed_request_event(self):
         """Test that generic exceptions also create FailedRequest events."""
         # Arrange
         command = commands.Question(question="Calculate metrics", q_id="test456")
 
-        def failing_handler(cmd):
+        async def failing_handler(cmd):
             raise RuntimeError("Unexpected error occurred")
 
         self.command_handlers[commands.Question] = failing_handler
 
         # Act
-        self.bus.handle(command)
+        await self.bus.handle(command)
 
         # Assert
         failed_handler = self.event_handlers[events.FailedRequest][0]
@@ -90,12 +93,13 @@ class TestMessageBusErrorHandling:
         assert failed_event.question == "Calculate metrics"
         assert "RuntimeError" in failed_event.exception
 
-    def test_agent_exception_preserves_context_in_message(self):
+    @pytest.mark.asyncio
+    async def test_agent_exception_preserves_context_in_message(self):
         """Test that AgentException context is included in user message."""
         # Arrange
         command = commands.Question(question="Get user data", q_id="test789")
 
-        def failing_handler(cmd):
+        async def failing_handler(cmd):
             raise ValidationException(
                 "Invalid input format",
                 context={"field": "email", "value": "not-an-email"},
@@ -104,7 +108,7 @@ class TestMessageBusErrorHandling:
         self.command_handlers[commands.Question] = failing_handler
 
         # Act
-        self.bus.handle(command)
+        await self.bus.handle(command)
 
         # Assert
         failed_handler = self.event_handlers[events.FailedRequest][0]
@@ -115,21 +119,22 @@ class TestMessageBusErrorHandling:
         # But not include sensitive context details
         assert "not-an-email" not in failed_event.exception
 
-    def test_exception_in_event_handler_continues_processing(self):
+    @pytest.mark.asyncio
+    async def test_exception_in_event_handler_continues_processing(self):
         """Test that exceptions in event handlers don't stop processing."""
         # Arrange
         command = commands.Question(question="Test query", q_id="test111")
 
         # First handler fails with exception
-        def failing_command_handler(cmd):
+        async def failing_command_handler(cmd):
             raise DatabaseConnectionException("Connection failed")
 
         # Event handler that also fails
-        def failing_event_handler(event):
+        async def failing_event_handler(event):
             raise RuntimeError("Event handler error")
 
         # Second event handler that should still run
-        successful_handler = Mock()
+        successful_handler = AsyncMock()
 
         # Create new bus with custom handlers to avoid infinite loop
         bus = MessageBus(
@@ -142,7 +147,7 @@ class TestMessageBusErrorHandling:
         )
 
         # Act
-        bus.handle(command)
+        await bus.handle(command)
 
         # Assert
         # Second handler should still be called despite first handler exception
@@ -150,7 +155,8 @@ class TestMessageBusErrorHandling:
         failed_event = successful_handler.call_args[0][0]
         assert isinstance(failed_event, events.FailedRequest)
 
-    def test_command_without_question_field_handles_gracefully(self):
+    @pytest.mark.asyncio
+    async def test_command_without_question_field_handles_gracefully(self):
         """Test handling commands that don't have question/q_id fields."""
         # Arrange
         # Use a different command type that might not have question field
@@ -158,11 +164,11 @@ class TestMessageBusErrorHandling:
         command.question = None  # No question field
         command.q_id = None
 
-        def failing_handler(cmd):
+        async def failing_handler(cmd):
             raise ValueError("Processing failed")
 
         # Create a separate failed request handler
-        failed_request_handler = Mock()
+        failed_request_handler = AsyncMock()
 
         # Create new bus to avoid infinite loop
         bus = MessageBus(
@@ -173,7 +179,7 @@ class TestMessageBusErrorHandling:
         )
 
         # Act
-        bus.handle(command)
+        await bus.handle(command)
 
         # Assert
         failed_request_handler.assert_called_once()
@@ -184,14 +190,15 @@ class TestMessageBusErrorHandling:
         assert failed_event.q_id == "unknown"
         assert "ValueError" in failed_event.exception
 
-    def test_original_behavior_preserved_for_successful_commands(self):
+    @pytest.mark.asyncio
+    async def test_original_behavior_preserved_for_successful_commands(self):
         """Test that successful commands work as before."""
         # Arrange
         command = commands.Question(question="Successful query", q_id="success123")
 
-        successful_handler = Mock()
-        response_handler = Mock()
-        failed_handler = Mock()
+        successful_handler = AsyncMock()
+        response_handler = AsyncMock()
+        failed_handler = AsyncMock()
 
         # Simulate agent creating a Response event
         response_event = events.Response(
@@ -215,7 +222,7 @@ class TestMessageBusErrorHandling:
         )
 
         # Act
-        bus.handle(command)
+        await bus.handle(command)
 
         # Assert
         # Command handler should be called normally
@@ -227,12 +234,13 @@ class TestMessageBusErrorHandling:
         # No FailedRequest event should be created
         failed_handler.assert_not_called()
 
-    def test_sensitive_data_filtered_from_error_messages(self):
+    @pytest.mark.asyncio
+    async def test_sensitive_data_filtered_from_error_messages(self):
         """Test that sensitive data is filtered from error messages sent to users."""
         # Arrange
         command = commands.Question(question="Connect to database", q_id="secure123")
 
-        def failing_handler(cmd):
+        async def failing_handler(cmd):
             raise DatabaseConnectionException(
                 "Failed to connect to database",
                 context={
@@ -244,7 +252,7 @@ class TestMessageBusErrorHandling:
         self.command_handlers[commands.Question] = failing_handler
 
         # Act
-        self.bus.handle(command)
+        await self.bus.handle(command)
 
         # Assert
         failed_handler = self.event_handlers[events.FailedRequest][0]
@@ -258,15 +266,16 @@ class TestMessageBusErrorHandling:
 class TestMessageBusEventHandlingWithErrors:
     """Test error handling for event processing."""
 
-    def test_exception_in_event_handler_logs_but_continues(self):
+    @pytest.mark.asyncio
+    async def test_exception_in_event_handler_logs_but_continues(self):
         """Test that exceptions in event handlers are logged but don't stop processing."""
         # This tests the existing behavior in handle_event which already
         # catches exceptions and continues
         adapter = Mock()
         adapter.collect_new_events = Mock(return_value=[])
 
-        failing_handler = Mock(side_effect=RuntimeError("Handler failed"))
-        successful_handler = Mock()
+        failing_handler = AsyncMock(side_effect=RuntimeError("Handler failed"))
+        successful_handler = AsyncMock()
 
         event_handlers = {events.Response: [failing_handler, successful_handler]}
 
@@ -282,7 +291,7 @@ class TestMessageBusEventHandlingWithErrors:
             response="Answer",  # Changed from 'answer' to 'response'
             q_id="test123",
         )
-        bus.handle(event)
+        await bus.handle(event)
 
         # Assert
         # Both handlers should be called
