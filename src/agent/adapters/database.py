@@ -262,8 +262,8 @@ class BaseDatabaseAdapter(AbstractDatabase):
                     except Exception as e:
                         exception[0] = e
                     finally:
-                        # Don't close the loop immediately to allow connection reuse
-                        pass
+                        # Close the loop to avoid event loop conflicts
+                        new_loop.close()
 
                 thread = threading.Thread(target=run_in_thread)
                 thread.start()
